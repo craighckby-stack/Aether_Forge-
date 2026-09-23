@@ -547,9 +547,13 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
             const dist = Math.sqrt(distSq) || 1;
 
             if (!a.opinions) a.opinions = {};
-            if (a.opinions[b.id] === undefined) {
+            if (!b.opinions) b.opinions = {};
+            const aOpinions = a.opinions as Record<string, number>;
+            const bOpinions = b.opinions as Record<string, number>;
+
+            if (aOpinions[b.id] === undefined) {
               let initialOp = (a.nationId === b.nationId ? 0.2 : -0.1) + (0.3 - beliefDiff);
-              a.opinions[b.id] = Math.max(-1, Math.min(1, initialOp));
+              aOpinions[b.id] = Math.max(-1, Math.min(1, initialOp));
             }
 
             // CONTRIBTUION AND EMOTIONAL CONTAGION
@@ -568,7 +572,7 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
                   a.anger = Math.max(0.1, (a.anger || 0.5) - 0.16 * dt);
                   a.joy = Math.min(1.0, (a.joy || 0.5) + 0.08 * dt);
                 } else if (b.devotion && b.devotion > 0.7) {
-                  a.opinions[b.id] = Math.max(-1.0, (a.opinions[b.id] || 0) - 0.12 * dt);
+                  aOpinions[b.id] = Math.max(-1.0, (aOpinions[b.id] || 0) - 0.12 * dt);
                   a.anger = Math.min(1.0, (a.anger || 0.5) + 0.08 * dt);
                 } else if (b.anger && b.anger > 0.6 && b.currentState !== "REBELLING") {
                   b.currentState = "REBELLING";
@@ -589,45 +593,45 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
                   if (b.currentState !== "DEFENDING" && rng.next() < 0.2) {
                     b.currentState = "DEFENDING";
                   }
-                  b.opinions[a.id] = Math.min(1.0, (b.opinions[a.id] || 0) + 0.06);
+                  bOpinions[a.id] = Math.min(1.0, (bOpinions[a.id] || 0) + 0.06);
                 } else {
-                  b.opinions[a.id] = Math.max(-1.0, (b.opinions[a.id] || 0) - 0.1 * dt);
+                  bOpinions[a.id] = Math.max(-1.0, (bOpinions[a.id] || 0) - 0.1 * dt);
                   b.fear = Math.min(1.0, (b.fear || 0.2) + 0.1 * dt);
                 }
               } else if (a.currentState === "PREACHING" && b.currentState !== "PANICKING") {
                 b.currentState = "PRAYING";
                 b.order = Math.min(1.0, b.order + 0.04 * dt);
                 b.devotion = Math.min(1.0, (b.devotion || 0) + 0.05 * dt);
-                b.opinions[a.id] = Math.min(1.0, (b.opinions[a.id] || 0) + 0.08);
+                bOpinions[a.id] = Math.min(1.0, (bOpinions[a.id] || 0) + 0.08);
                 if (rng.next() < 0.01) {
                   const lessons = ["prophesied Omega", "explained primal recursion", "absolved kinetic drag", "prayed for solar fuel"];
                   const lesson = lessons[Math.floor(rng.next() * lessons.length)];
                   b.memory = [`Sermon: ${a.name} ${lesson}.`, ...b.memory];
                 }
               } else if (a.currentState === "DISCOURSING" && b.currentState === "DISCOURSING") {
-                const opinionDiff = (a.opinions[b.id] || 0) + (b.opinions[a.id] || 0);
+                const opinionDiff = (aOpinions[b.id] || 0) + (bOpinions[a.id] || 0);
                 if (opinionDiff > 0 && beliefDiff < 0.3) {
                   a.rationalism = Math.min(1.0, a.rationalism + 0.015);
                   b.rationalism = Math.min(1.0, b.rationalism + 0.015);
                   a.joy = Math.min(1.0, (a.joy || 0) + 0.08);
                   b.joy = Math.min(1.0, (b.joy || 0) + 0.08);
-                  a.opinions[b.id] = Math.min(1.0, (a.opinions[b.id] || 0) + 0.04);
+                  aOpinions[b.id] = Math.min(1.0, (aOpinions[b.id] || 0) + 0.04);
                   if (rng.next() < 0.01) {
                     newEvents.push({ message: `SYNERGY: ${a.name} and ${b.name} synchronized their algorithmic proofs.`, type: "ENLIGHTENMENT" });
                   }
                 } else {
-                  a.opinions[b.id] = Math.max(-1.0, (a.opinions[b.id] || 0) - 0.08);
+                  aOpinions[b.id] = Math.max(-1.0, (aOpinions[b.id] || 0) - 0.08);
                   a.anger = Math.min(1.0, (a.anger || 0) + 0.1 * dt);
                   if (rng.next() < 0.01) {
                     newEvents.push({ message: `DEBATE: ${a.name} and ${b.name} clashed over simulation constants.`, type: "WARNING" });
                   }
                 }
               } else if (a.currentState === "IDLE" && b.currentState === "IDLE") {
-                const loveRating = a.opinions[b.id] || 0;
+                const loveRating = aOpinions[b.id] || 0;
                 if (loveRating > 0.3) {
                   a.fear = Math.max(0, (a.fear || 0) - 0.1);
                   b.joy = Math.min(1.0, (a.joy || 0) + 0.1);
-                  a.opinions[b.id] = Math.min(1.0, (a.opinions[b.id] || 0) + 0.03);
+                  aOpinions[b.id] = Math.min(1.0, (aOpinions[b.id] || 0) + 0.03);
                   if (rng.next() < 0.005) {
                     newEvents.push({ message: `COMMUNITY: ${a.name} comforted ${b.name} within the mainframe.`, type: "INFO" });
                   }

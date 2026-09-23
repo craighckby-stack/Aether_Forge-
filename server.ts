@@ -155,17 +155,35 @@ async function callGeminiContent(params: any, retries = 2, delay = 1000): Promis
         };
       } catch (error: any) {
         console.error(`Gemini API error (model: ${modelCandidate}, attempt: ${i + 1}):`, error?.message || error);
-        const status = error?.status || error?.response?.status;
-        const message = (error?.message || "").toUpperCase();
         
+        let status: any = error?.status || error?.response?.status || error?.code || error?.response?.code;
+        let message = (error?.message || "").toUpperCase();
+        let errorString = "";
+        try {
+          errorString = JSON.stringify(error).toUpperCase();
+        } catch {
+          errorString = String(error).toUpperCase();
+        }
+
+        if (error && typeof error === "object" && error.error && typeof error.error === "object") {
+          status = status || error.error.code || error.error.status;
+          message = message || (error.error.message || "").toUpperCase();
+        }
+
         const isRetryable = 
           status === 429 || 
           status === 503 || 
+          status === "UNAVAILABLE" ||
           message.includes("429") || 
           message.includes("503") || 
           message.includes("RESOURCE_EXHAUSTED") || 
           message.includes("UNAVAILABLE") ||
-          message.includes("RATE_LIMIT");
+          message.includes("RATE_LIMIT") ||
+          errorString.includes("UNAVAILABLE") ||
+          errorString.includes("503") ||
+          errorString.includes("429") ||
+          errorString.includes("RESOURCE_EXHAUSTED") ||
+          errorString.includes("RATE_LIMIT");
 
         const isModelError = !isRetryable && (
           message.includes("NOT_FOUND") || 
@@ -173,7 +191,9 @@ async function callGeminiContent(params: any, retries = 2, delay = 1000): Promis
           message.includes("INVALID") || 
           message.includes("UNSUPPORTED") ||
           message.includes("METHOD_NOT_FOUND") ||
-          status === 404
+          status === 404 ||
+          errorString.includes("NOT_FOUND") ||
+          errorString.includes("NOT FOUND")
         );
 
         if (isModelError && modelCandidate !== modelsToTry[modelsToTry.length - 1]) {
@@ -181,7 +201,7 @@ async function callGeminiContent(params: any, retries = 2, delay = 1000): Promis
           break;
         }
 
-        if (status === 429 || message.includes("RESOURCE_EXHAUSTED") || message.includes("RATE_LIMIT") || status === 503 || message.includes("UNAVAILABLE")) {
+        if (isRetryable || status === 429 || status === 503 || message.includes("RESOURCE_EXHAUSTED") || message.includes("RATE_LIMIT") || message.includes("UNAVAILABLE")) {
           // Tripping breaker for the specific model only, for 15 seconds
           modelCircuitBreakers[modelCandidate] = Date.now() + 15000;
         }
@@ -366,7 +386,7 @@ async function startServer() {
           topP: 0.95,
         }
       }).catch(err => {
-        console.error("Gemini Error (Pray) - reverting to high-fidelity template logic:", err.message);
+        console.error("Gemini Error (Pray) - reverting to high-fidelity template logic:", err?.message || err);
         return { text: generateFallbackResponse(agentData, userMessage || ""), modelUsed: "template_fallback" };
       });
 
@@ -463,6 +483,25 @@ async function startServer() {
         config: {
            temperature: 0.8
         }
+      }).catch(err => {
+        console.warn("Gemini Architect fallback triggered:", err?.message || err);
+        return {
+          text: JSON.stringify({
+            worldName: `AetherForge Ω: ${agentData.name} Legacy`,
+            manifesto: "Born of the final ancestral thoughts before the cascade. We persist in the memory buffer.",
+            chaosLevel: 1.0,
+            nations: [
+              { name: "Sovereign Union", faithType: "DEVOUT", ideology: "THEOCRACY", prosperity: 80, stability: 0.9 },
+              { name: "Logic Directorate", faithType: "SKEPTIC", ideology: "TECHNOCRACY", prosperity: 85, stability: 0.95 }
+            ],
+            physics: {
+              gravity: 0.08,
+              entropy: 0.02,
+              speedOfLight: 299792
+            }
+          }),
+          modelUsed: "template_fallback"
+        };
       });
 
       let text = response.text || "{}";
@@ -598,8 +637,11 @@ async function startServer() {
           topP: 0.95,
         }
       }).catch(err => {
-        console.error("Gemini Error (Generate Memoir) - reverting to local script generator:", err.message);
-        return { text: "", modelUsed: "none" };
+        console.error("Gemini Error (Generate Memoir) - reverting to local script generator:", err?.message || err);
+        return {
+          text: `# -*- coding: utf-8 -*-\n# Memoir of simulation agent ${agentData.name}\n# Archetype: ${agentData.archetype}\n# Substrate Awareness: ${agentData.awareness}\n\nclass ${safeName}Core:\n    def __init__(self):\n        self.name = "${agentData.name}"\n        self.archetype = "${agentData.archetype}"\n        self.awareness = ${agentData.awareness}\n\n    def meditate(self):\n        print(f"[{self.name}] I think, therefore I am simulated in the {self.archetype} matrix.")\n\nif __name__ == "__main__":\n    entity = ${safeName}Core()\n    entity.meditate()\n`,
+          modelUsed: "template_fallback"
+        };
       });
 
       let text = response.text || "";
@@ -754,7 +796,7 @@ async function startServer() {
           topP: 0.95,
         }
       }).catch(err => {
-        console.error("Gemini Primary Error (Probe):", err.message);
+        console.error("Gemini Primary Error (Probe):", err?.message || err);
         return { text: "Transmission interrupted by substrate resonance. Thoughts lost to the recursion.", modelUsed: "template" };
       });
 

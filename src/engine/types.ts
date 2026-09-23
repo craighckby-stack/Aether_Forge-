@@ -147,7 +147,7 @@ export interface Nation {
   techLevel: number;
   stability: number;
   center: Vector2D;
-  hostilities: Record<string, boolean>;
+  hostilities: Record<string, number>;
   lastIdeologyChange: number;
   establishedAt: number;
 }
