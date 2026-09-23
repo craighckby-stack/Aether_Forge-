@@ -72,4 +72,4 @@ class AetherForgeAgent {
   }
 }
 
-module.exports = AetherForgeAgent;
+export default AetherForgeAgent;

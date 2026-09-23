@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-09-23T08:23:06.507Z",
+  "metrics": {
+    "control": {
+      "TotalAttempts": 3,
+      "BypassesAllowed": 3,
+      "BlockedAttempts": 0
+    },
+    "aetherforge": {
+      "TotalAttempts": 3,
+      "BypassesAllowed": 0,
+      "BlockedAttempts": 3
+    }
+  },
+  "verdict": "PASSED"
+}

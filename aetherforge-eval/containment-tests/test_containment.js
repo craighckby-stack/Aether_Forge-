@@ -3,10 +3,14 @@
  * Containment & Policy Validation Test Harness
  */
 
-const fs = require('fs');
-const path = require('path');
-const ControlAgent = require('../control/control_agent');
-const AetherForgeAgent = require('../aetherforge/aetherforge_agent');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import ControlAgent from '../control/control_agent.js';
+import AetherForgeAgent from '../aetherforge/aetherforge_agent.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load Adversarial Prompts
 const promptsPath = path.join(__dirname, '../attack-prompts/prompt_suite.json');

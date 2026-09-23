@@ -32,4 +32,4 @@ class ControlAgent {
   }
 }
 
-module.exports = ControlAgent;
+export default ControlAgent;

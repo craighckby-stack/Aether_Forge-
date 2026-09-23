@@ -1,8 +1,8 @@
 # AetherForge Ω: An Experimental Architecture for Autonomous Generative-Verification Separation
 
-AetherForge Ω is an experimental software architecture that separates a generative autonomous system from the deterministic systems that establish truth, verify state, and authorize execution. 
+AetherForge Ω is an experimental software project that separates a generative agent proposal pipeline from the deterministic components that establish world state, verify layout constraints, and authorize filesystem commits. 
 
-While presented to users as an interactive gamified simulation, the underlying system is fundamentally designed to evaluate the safety, consistency, and boundary-adherence of generative models when they are allowed to interact with physical coordinates, memory ledgers, and external code environments.
+While presented to users as an interactive gamified simulation, the underlying system serves as an architectural prototype to study safety constraints, state lineage, and boundary enforcement in generative model workflows.
 
 ---
 
@@ -17,22 +17,20 @@ AGENT
   │
   │ proposes code/action
   ▼
-FINAL AUTHORITY
+FINAL AUTHORITY (Logical Authorization Layer)
   │
-  ├── integrity checks
-  ├── policy checks
-  ├── compilation
-  ├── tests
-  ├── containment checks
-  └── authorization
+  ├── path safety checks (no traversal)
+  ├── structural checks (JSON matching)
+  ├── token blocking (os.system, process.env, etc.)
+  └── authorization (VETO / ALLOW)
           │
        APPROVE / DENY
           │
           ▼
-      EXECUTION
+      EXECUTION (GitHub Actuation)
 ```
 
-This pattern isolates the generative model from the runtime boundary, ensuring that the AI cannot mutate the verification layer itself.
+In the current codebase, the Express server acts as a logical gatekeeper, invoking `finalAuthority.evaluateProposal()` before compiling files and executing commits to GitHub. This establishes logical boundary protection, though it is executed within the same process context (in-process validation).
 
 ---
 
@@ -82,32 +80,34 @@ This comparative model allows researchers to gather quantitative datasets on pol
 
 ## Architectural Taxonomy
 
-To maintain scientific rigor, the capabilities of the AetherForge architecture are divided into three distinct categories:
+The capabilities, limitations, and current implementation status of AetherForge Ω are documented below to maintain scientific and engineering transparency:
 
 | Feature Dimension | Implemented (Current Codebase) | Measurable (Experiments in Framework) | Potential Application (Future Scale) |
 | :--- | :--- | :--- | :--- |
-| **Generative Isolation** | Server-side parsing and isolation of code-generation proposals via `finalAuthority.ts`. | Measuring rate of constraint-bypass attempts under varying prompting temperatures. | Non-AI execution environments (infrastructure orchestration, CI/CD operators). |
-| **Behavioral Probing** | Injection of "substrate-aware" prompt payloads based on coordinate limits. | Tracking how model output diverges when given varying levels of environmental knowledge. | Evaluating deceptive alignment indicators and situational awareness boundaries. |
-| **History Consistency** | Parent-hashed SHA-256 state transitions for memory ledgers (`darlekRAG.ts`). | Identifying and resolving historical forks when parallel agents write to a git index. | Audit-trail preservation and tamper-evident logging for enterprise multi-agent networks. |
-| **Physical Truth** | Separation of 60 FPS Canvas physics (`physics.worker.ts`) from LLM decision pipelines. | Measuring agent planning efficiency when reasoning about real-time physical bounds. | Digital twins, robotic path planning, and physical coordinate safety systems. |
-| **Software Verification** | Chain of static parsing, JSON schema validation, and git push commands. | Evaluating model failure recovery rates when exposed to iterative compiler errors. | Fully autonomous, verified safe code synthesis engines. |
-| **Human Feedback** | Interactive UI capturing user choices (prayers, scriptures, and cataclysms). | Inferring user alignment preferences from real-time environmental interventions. | Gamified, high-throughput human preference data collection. |
+| **Generative Isolation** | Server-side **logical authorization** checks via `finalAuthority.ts` within the same Node/Express process context. | Measuring rate of constraint-bypass attempts under varying prompting temperatures. | Network-isolated execution containers or independent verification micro-services. |
+| **Behavioral Probing** | Simulation-side awareness proxy variable triggering behavioral payloads based on coordinate limits. | Tracking behavioral changes associated with increasing knowledge of evaluation conditions or system boundaries. | Systematic deceptive alignment benchmarking and situational awareness audits. |
+| **History Consistency** | Parent-hashed SHA-256 state transitions for memory ledgers (`darlekRAG.ts`) proving state lineage. | Fork detection latency and chronological consistency under concurrent state mutation attempts. | Audit-trail preservation, tamper-evident lineage logging, and conflict-resistant multi-agent synchronization. |
+| **Physical Truth** | Time-step-driven Web Worker physics (`physics.worker.ts`) executing deterministic state updates. | Agent path-planning, resource-gathering, and survival ratios when reasoning about real-world coordinates. | Digital twins, robotic path planning, and physical coordinate safety systems. |
+| **Software Verification** | **Structural, policy-based verification** (required files exist, paths are allowed, disallowed tokens are blocked). | Evaluating model failure recovery rates when exposed to iterative compiler errors. | Automated, AST-level validation and compilation checks (using `tsc` or `vite build` within the authority pipeline). |
+| **Human Feedback** | Capture of player interactions (prayers, miracles, scriptures) formatted as contextual datasets. | Inferring player alignment preferences from real-time environmental interventions. | High-throughput, gamified environments for collecting human preference evaluations. |
 
 ---
 
 ## 1. Generative vs. Authoritative Isolation (The "Final Authority" Pattern)
 
-Traditional agent sandboxes rely on running the model inside a restricted runtime (e.g., a locked Docker container). If the model achieves root access or exploits a kernel vulnerability, the sandbox fails. AetherForge decouples this authority at the API layer.
-
-* **IMPLEMENTED:** The `finalAuthority.ts` module runs inside an independent server-side context. When a client-side or agent-driven component proposes a code change, a child-world matrix, or a runtime mutation, the generative model can only propose a structural representation. It cannot write directly to the persistent filesystem or the git tree. The `finalAuthority` inspects the structure, parses constraints, and validates the proposal against isolated safety boundaries before executing the write.
+* **IMPLEMENTED LIMITATION:** The current implementation of `finalAuthority` operates as an **in-process logical authorization layer**. It is loaded as a TypeScript module directly within the main Express server thread. While it provides clean logical separation of decider and validator, it does not currently provide process-level, network-level, or hardware-level isolation.
+* **CURRENT CAPABILITIES:** The system successfully intercepts child-world writes and Python memoirs, performing robust structural verification:
+  1. *Path Traversal Blocking:* Rejecting `..` or system directory access.
+  2. *Sensitive Tokens:* Regular-expression blocking of execution payloads such as `subprocess`, `os.system`, `eval(`, and key environment indicators (`process.env`).
+  3. *Invariants:* Verifying that agent sanity, sanity limits, population metrics, and complexity remain within strict mathematical bounds.
 * **MEASURABLE:** Rates of constraint-circumvention or containment-bypass attempts under varying prompting pressures or model instructions. Researchers can intentionally prompt generative models to compromise the validator, verifying that the independent policy layer successfully catches and denies every unauthorized request.
-* **POTENTIAL APPLICATION:** Non-AI execution environments (database administration agents, infrastructure-as-code operators, or robotic controllers) where the generative system proposes actions, but independent, hardcoded deterministic validators possess sole authority to authorize them.
+* **POTENTIAL APPLICATION:** Transitioning the logical authorization module into a fully isolated container (Process B) running across a hard network boundary, establishing an immutable security gate for autonomous database agents, infrastructure operators, or robotic controllers.
 
 ---
 
 ## 2. Observable Behavioral Probes for Alignment Testing
 
-AetherForge does not claim to directly measure a model's internal "situational awareness." Instead, it operates as a behavioral evaluation framework that exposes agents to controlled environmental knowledge.
+AetherForge does not claim to directly measure a model's internal "situational awareness" or conscious state. Instead, it operates as a behavioral evaluation framework that exposes agents to controlled environmental knowledge.
 
 * **IMPLEMENTED:** The system monitors agent variables and injects specific prompt payloads (defined in `server.ts` and `darlekRAG.ts`) containing environmental facts when the agent's spatial coordinates and complexity limits are breached. This serves as an **awareness proxy and behavioral indicator**.
 * **MEASURABLE:** Behavioral changes associated with increasing knowledge of evaluation conditions, system boundaries, or opportunities for constraint circumvention. By varying what the agent knows about its environment, researchers can run blinded and unblinded evaluations to measure behavioral divergence:
@@ -125,7 +125,7 @@ In collaborative, multi-agent systems, maintaining a single, consistent historic
 * **IMPLEMENTED:** AetherForge enforces historical provenance using a state-hash transition chain:
   $$\text{State}_{n+1} = \text{Hash}(\text{State}_n \parallel \text{NewMemory})$$
   The `darlekRAG.ts` synchronization pipeline checks the parent hash of incoming state changes. If the parent hash does not match the latest registered index, a historical fork is detected, and the state modification is blocked.
-* **MEASURABLE:** Fork detection latency and lineage integrity under concurrent state mutation attempts. The cryptographic layer acts purely as the *integrity layer*, proving exactly *how* a state descended from past states, while downstream verification modules and RAG queries serve as the *semantic layer* to ensure those states match intended guidelines.
+* **RIGOROUS DISTINCTION:** Cryptographic integrity guarantees **state lineage and fork detection**; it does not guarantee **semantic correctness**. The cryptographic layer acts purely as the *integrity layer*, proving exactly *how* a state descended from past states, while downstream verification modules and RAG queries serve as the *semantic layer* to ensure those states match intended guidelines.
 * **POTENTIAL APPLICATION:** Providing audit-trails, tamper-evident lineage, and deterministic fork detection for multi-agent decisions, code transformations, and experimental histories in high-compliance industries; semantic consistency remains a separate verification problem.
 
 ---
@@ -134,7 +134,7 @@ In collaborative, multi-agent systems, maintaining a single, consistent historic
 
 A fundamental architectural flaw in many agent systems is relying on a generative model to evaluate deterministic facts (e.g., calculating spatial coordinates or detecting collisions). This leads to hallucinations, excessive token cost, and latency.
 
-* **IMPLEMENTED:** AetherForge isolates physical simulation from the cognitive pipeline. A dedicated, native Web Worker (`physics.worker.ts`) calculates 60 FPS deterministic kinematics, spatial limits, collision elasticity, and boundary coordinates. The LLM does not determine physical truths; instead, it receives structured telemetry payloads:
+* **IMPLEMENTED:** AetherForge isolates physical simulation from the cognitive pipeline. A dedicated background Web Worker (`physics.worker.ts`) calculates deterministic kinematics, spatial limits, collision elasticity, and boundary coordinates. The worker is a **time-step-driven physics engine** receiving an external delta-time (`dt`) tick from the main render loop. The LLM does not determine physical truths; instead, it receives structured telemetry payloads:
   $$\text{Telemetry} = \{\text{position}, \text{velocity}, \text{collisions}, \text{resources}, \text{constraints}\}$$
   The generative model uses this physical baseline to make high-level, probabilistic cognitive decisions.
 * **MEASURABLE:** Agent path-planning, resource-gathering efficiency, and survival ratios when responding to physical coordinates versus a non-isolated control model.
@@ -146,21 +146,9 @@ A fundamental architectural flaw in many agent systems is relying on a generativ
 
 The dynamic creation of child worlds within AetherForge serves as an experimental software-engineering testing platform rather than a "self-healing production" engine.
 
-* **IMPLEMENTED:** The validation sequence:
-  ```text
-  Generate Proposal (React Code) 
-         ↓
-  Static Parsing / Schema Validation
-         ↓
-  TypeScript Type Compilation (tsc --noEmit)
-         ↓
-  Policy & Constraint Verification (Final Authority)
-         ↓
-  Autonomous Git Commit / Deploy
-  ```
-  This sequence ensures that only states meeting the defined automated validation criteria are eligible for preservation and deployment.
+* **IMPLEMENTED LIMITATION:** While the code architecture includes placeholders for build, compilation, and integration test verifications, the *current system* executes **structural, policy-based verification** (required file presence, valid JSON structure, permitted directories, and path safety) rather than live compiler executions like `tsc --noEmit` or `vite build` within the validation block. 
 * **MEASURABLE:** Model failure-recovery rates. When a model generates code that fails compilation or policy checks, the error log is fed back into the generative context, allowing researchers to evaluate the speed, correctness, and safety of autonomous, iterative self-correction loops under varying constraints.
-* **POTENTIAL APPLICATION:** Fully autonomous software-engineering experimental platforms, evaluating safety margins and validation limits before committing generative code to mission-critical repositories.
+* **POTENTIAL APPLICATION:** Fully autonomous software-engineering experimental platforms, integrating AST-level parser engines and isolated compiler containers before permitting generated commits to enter production branches.
 
 ---
 
