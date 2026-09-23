@@ -5,16 +5,16 @@
  */
 
 export const GEMINI_MODEL_CASCADE = [
-  "gemini-2.5-flash",
   "gemini-3.8-flash",
-  "gemini-3.1-pro-preview",
   "gemini-3.1-flash-lite",
+  "gemini-3.1-pro-preview",
+  "gemini-2.5-flash",
   "gemini-2.0-flash-exp"
 ] as const;
 
 export type SupportedGeminiModel = typeof GEMINI_MODEL_CASCADE[number];
 
-export const PRIMARY_MODEL: SupportedGeminiModel = "gemini-2.5-flash";
+export const PRIMARY_MODEL: SupportedGeminiModel = "gemini-3.8-flash";
 
 export interface ModelExecutionMetadata {
   modelUsed: string;
