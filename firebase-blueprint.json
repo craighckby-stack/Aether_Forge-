@@ -13,7 +13,26 @@
         "order": { "type": "number" },
         "rationalism": { "type": "number" },
         "sanity": { "type": "number" },
-        "archetype": { "type": "string", "enum": ["SAGE", "WARRIOR", "SCIENTIST", "ARTIST", "TYRANT", "GLITCH", "MESSIAH", "ANGEL", "DEMON", "PROPHET"] },
+        "archetype": {
+          "type": "string",
+          "enum": [
+            "PRIEST",
+            "SCHOLAR",
+            "WARRIOR",
+            "ARTISAN",
+            "PROPHET",
+            "ZEALOT",
+            "SCIENTIST",
+            "HERETIC",
+            "ANGEL",
+            "DEMON",
+            "MESSIAH",
+            "TYRANT",
+            "GLITCH",
+            "SAGE",
+            "ARTIST"
+          ]
+        },
         "memory": { "type": "array", "items": { "type": "string" } },
         "x": { "type": "number" },
         "y": { "type": "number" },
@@ -42,7 +61,8 @@
         "judgmentMeter": { "type": "number" },
         "heavenPop": { "type": "integer" },
         "hellPop": { "type": "integer" }
-      }
+      },
+      "required": ["clock", "complexity", "integrity", "population", "epoch"]
     },
     "Event": {
       "title": "Event",
@@ -52,7 +72,8 @@
         "timestamp": { "type": "number" },
         "message": { "type": "string" },
         "type": { "type": "string", "enum": ["INFO", "WARNING", "CRITICAL", "ENLIGHTENMENT", "MIRACLE", "DIVINE_WRATH", "GOSPEL"] }
-      }
+      },
+      "required": ["timestamp", "message", "type"]
     }
   },
   "firestore": {

@@ -1,5 +1,20 @@
 import { Archetype, EpochType, Agent, ResourceNode, Nation } from "./types";
 
+// High-speed deterministic 32-bit PRNG for physics worker
+class WorkerMulberry32 {
+  private state: number = 0x1337;
+  public seed(s: number) {
+    this.state = (s >>> 0) || 0x1337;
+  }
+  public next(): number {
+    let t = (this.state += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+}
+const rng = new WorkerMulberry32();
+
 // Setup types for incoming and outgoing messages
 interface PhysicsWorkerInput {
   currentAgents: Agent[];
@@ -22,6 +37,7 @@ interface PhysicsWorkerInput {
   sanityShield: number;
   atmosphere?: string;
   worldId?: string;
+  seed?: number;
 }
 
 const generateNameInWorker = (epoch: EpochType): string => {
@@ -177,7 +193,12 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
     sanityShield,
     atmosphere,
     worldId,
+    seed,
   } = e.data;
+
+  if (typeof seed === "number") {
+    rng.seed(seed);
+  }
 
   const nextAgents: Agent[] = [];
   const updatedResources: ResourceNode[] = [...resources];

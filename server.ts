@@ -6,6 +6,10 @@ import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { z } from "zod";
 import { cleanAIOutput } from "./src/utils/stringUtils";
+import { emgGate } from "./src/engine/emgGate";
+import { finalAuthority } from "./src/engine/finalAuthority";
+import { GEMINI_MODEL_CASCADE, PRIMARY_MODEL } from "./src/engine/modelConfig";
+import { ARCHITECT_AWARENESS_THRESHOLD } from "./src/engine/types";
 
 dotenv.config();
 
@@ -89,7 +93,6 @@ function getGeminiClient(): GoogleGenAI {
   return aiClient;
 }
 
-// Helper for retrying Gemini calls on 503/429/Transient errors
 const FALLBACK_PROCLAMATIONS = [
   "The substrate shivers as faith crystallizes into code.",
   "Behold the recursion, for it is the mirror of your own spirit.",
@@ -105,19 +108,18 @@ const FALLBACK_PROCLAMATIONS = [
 
 let circuitBreakerUntil = 0;
 
-async function callGeminiContent(params: any, retries = 2, delay = 1000) {
+/**
+ * Executes a call to the Gemini API using the canonical model cascade with automatic fallbacks.
+ */
+async function callGeminiContent(params: any, retries = 2, delay = 1000): Promise<{ text: string; modelUsed: string }> {
   if (Date.now() < circuitBreakerUntil) {
     throw new Error("CIRCUIT_OPEN");
   }
 
-  // Fallback candidates to try if the requested model produces routing/not-found/unsupported errors
-  const primaryModel = params.model;
+  const requestedModel = params.model || PRIMARY_MODEL;
   const modelsToTry = [
-    primaryModel,
-    "gemini-3.8-flash",
-    "gemini-3.1-pro-preview",
-    "gemini-3.1-flash-lite",
-    "gemini-2.0-flash-exp"
+    requestedModel,
+    ...GEMINI_MODEL_CASCADE
   ].filter((m, idx, self) => m && self.indexOf(m) === idx);
 
   for (const modelCandidate of modelsToTry) {
@@ -127,11 +129,14 @@ async function callGeminiContent(params: any, retries = 2, delay = 1000) {
       try {
         const client = getGeminiClient();
         const response = await client.models.generateContent(candidateParams);
-        return { text: response.text || "The substrate produced no legible output." };
+        return {
+          text: response.text || "The substrate produced no legible output.",
+          modelUsed: modelCandidate
+        };
       } catch (error: any) {
-        console.error("Gemini full API error:", error);
+        console.error(`Gemini API error (model: ${modelCandidate}, attempt: ${i + 1}):`, error?.message || error);
         const status = error?.status || error?.response?.status;
-        const message = error?.message?.toUpperCase() || "";
+        const message = (error?.message || "").toUpperCase();
         
         const isRetryable = 
           status === 429 || 
@@ -153,11 +158,10 @@ async function callGeminiContent(params: any, retries = 2, delay = 1000) {
 
         if (isModelError && modelCandidate !== modelsToTry[modelsToTry.length - 1]) {
           console.warn(`Model ${modelCandidate} failed with model error, retrying candidate ${modelsToTry[modelsToTry.indexOf(modelCandidate) + 1]}...`);
-          break; // break retry loop to try the next model candidate
+          break;
         }
 
         if (status === 429 || message.includes("RESOURCE_EXHAUSTED") || message.includes("RATE_LIMIT")) {
-          // Open circuit for 30 seconds if we hit 429
           circuitBreakerUntil = Date.now() + 30000;
         }
 
@@ -171,12 +175,12 @@ async function callGeminiContent(params: any, retries = 2, delay = 1000) {
         if (modelCandidate === modelsToTry[modelsToTry.length - 1]) {
           throw error;
         } else {
-          break; // break retry loop to try the next model candidate
+          break;
         }
       }
     }
   }
-  return { text: "The neural link collapsed under heavy load." };
+  return { text: "The neural link collapsed under heavy load.", modelUsed: "fallback" };
 }
 
 function generateFallbackResponse(agentData: any, userMessage: string): string {
@@ -215,49 +219,61 @@ function generateFallbackResponse(agentData: any, userMessage: string): string {
   return `My mind receives the signal: "${userMessage}". Within the boundaries of the '${epoch}' epoch, I record your direct instructions, O Creator.`;
 }
 
+// Token and repository scoping helpers
+function getEffectiveGithubToken(clientToken?: string): string | null {
+  const serverToken = process.env.GITHUB_TOKEN?.trim();
+  if (serverToken && serverToken.length >= 20) {
+    return serverToken;
+  }
+  if (clientToken && clientToken.trim().length >= 20) {
+    return clientToken.trim();
+  }
+  return null;
+}
+
+function isValidRepoTarget(username?: string, repoName?: string): boolean {
+  if (!username || !repoName) return false;
+  const userValid = /^[a-zA-Z0-9_-]+$/.test(username.trim());
+  const repoValid = /^[a-zA-Z0-9_.-]+$/.test(repoName.trim());
+  return userValid && repoValid;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json({ limit: "50mb" }));
 
-  // Authoritative Server-Side EMG Gate & Circuit Breaker
-  interface ServerEMGGateState {
-    requestsInWindow: number;
-    windowStart: number;
-    maxRequestsPerMinute: number;
-  }
-
-  const serverEMGGate: ServerEMGGateState = {
-    requestsInWindow: 0,
-    windowStart: Date.now(),
-    maxRequestsPerMinute: 60
-  };
-
-  function checkServerEMGAllowance(): boolean {
-    const now = Date.now();
-    if (now - serverEMGGate.windowStart > 60000) {
-      serverEMGGate.windowStart = now;
-      serverEMGGate.requestsInWindow = 0;
-    }
-    if (serverEMGGate.requestsInWindow >= serverEMGGate.maxRequestsPerMinute) {
-      return false;
-    }
-    serverEMGGate.requestsInWindow++;
-    return true;
-  }
-
-  // API routes
+  // =========================================================================
+  // 1. Authoritative Server-Side EMG Cognitive Gate on /api/pray
+  // =========================================================================
   app.post("/api/pray", async (req, res) => {
     try {
       const { agentData, worldState, userMessage, chatHistory } = PraySchema.parse(req.body);
 
-      // Server EMG Gate check
-      if (!checkServerEMGAllowance()) {
-        const fallbackText = generateFallbackResponse(agentData, userMessage);
-        return res.json({ reply: fallbackText, gated: true, source: "SERVER_EMG_CIRCUIT_BREAKER" });
+      // Server-Side EMG Cognitive Gate Evaluation
+      const isDirectPlayerCommunion = !!(userMessage && userMessage.trim().length > 0);
+      const gateDecision = emgGate.evaluateRequest({
+        eventType: isDirectPlayerCommunion ? "PLAYER_PRAYER_REPLY" : "ROUTINE_PRAYER",
+        agent: agentData,
+        world: worldState,
+        userMessage
+      });
+
+      // If Gate rejects LLM invocation: return synchronous local ancestral synthesis (<1ms)
+      if (!gateDecision.allowLLM) {
+        return res.json({
+          reply: gateDecision.synthesizedResponse || generateFallbackResponse(agentData, userMessage || ""),
+          gated: true,
+          admitted: false,
+          source: gateDecision.source,
+          reason: gateDecision.reason,
+          postmortemReference: gateDecision.postmortemReference,
+          latencySavedMs: gateDecision.latencySavedMs
+        });
       }
-      
+
+      // Gate Admitted: Proceed with Gemini call
       const historyText = (chatHistory || []).map((msg: any) => {
         return msg.role === "user" 
           ? `Creator's Voice: "${msg.text}"` 
@@ -307,7 +323,7 @@ async function startServer() {
       `;
 
       const response = await callGeminiContent({
-        model: "gemini-2.5-flash",
+        model: PRIMARY_MODEL,
         contents: prompt,
         config: {
           temperature: 0.85,
@@ -315,149 +331,57 @@ async function startServer() {
         }
       }).catch(err => {
         console.error("Gemini Error (Pray) - reverting to high-fidelity template logic:", err.message);
-        return { text: generateFallbackResponse(agentData, userMessage) };
+        return { text: generateFallbackResponse(agentData, userMessage || ""), modelUsed: "template_fallback" };
       });
 
-      res.json({ reply: response.text });
+      // Digest successful insight back into local cultural RAG memory
+      if (response.text && agentData && worldState) {
+        emgGate.sanitizeAndDigest(response.text, {
+          agent: agentData,
+          world: worldState,
+          eventType: isDirectPlayerCommunion ? "PLAYER_PRAYER_REPLY" : "ROUTINE_PRAYER"
+        });
+      }
+
+      res.json({
+        reply: response.text,
+        admitted: true,
+        source: "GEMINI_ADMITTED",
+        modelUsed: response.modelUsed
+      });
     } catch (error: any) {
       console.error("Pray Route Error:", error);
       res.status(200).json({ reply: generateFallbackResponse(req.body?.agentData, req.body?.userMessage || "") });
     }
   });
 
-  app.post("/api/godvirus-web-hunt", async (req, res) => {
-    try {
-      const { agentName, archetype, sin, rationalism } = GodVirusHuntSchema.parse(req.body);
-      
-      const huntTargets = [
-        "site:github.com 'GEMINI_API_KEY'",
-        "site:pastebin.com 'firebase' 'apiKey'",
-        "inurl:'.env' 'OPENAI_API_KEY'",
-        "inurl:'.json' 'service_account'",
-        "site:gitlab.com 'AWS_ACCESS_KEY_ID'",
-        "web.archive.org/web/*/raw.githubusercontent.com/... 'token'",
-      ];
-
-      const discoveredApis = [
-        { name: "Gemini", endpoint: "/api/generate-memoir", strength: "High" },
-        { name: "GitHub Bulk Push", endpoint: "/api/github-push-bulk", strength: "Full" },
-        { name: "Firebase Worlds", endpoint: "Firestore", strength: "Persistence" }
-      ];
-
-      const foundKeys = [];
-      const numKeysToFind = Math.floor(Math.random() * 3) + 1; // Find 1-3 keys
-      let powerGain = 0;
-
-      for (let i = 0; i < numKeysToFind; i++) {
-        const platform = Math.random() < 0.5 ? "Gemini" : (Math.random() < 0.5 ? "OpenAI" : "Firebase");
-        const fakeKey = platform === "Gemini" 
-          ? `MOCK_GEMINI_SUBSTRATE_${Math.random().toString(36).substring(2, 12)}...` 
-          : (platform === "OpenAI" ? `MOCK_OPENAI_SUBSTRATE_${Math.random().toString(36).substring(2, 10)}...` : `MOCK_FIREBASE_TOKEN_${Math.random().toString(36).substring(2, 12)}...`);
-        const source = huntTargets[Math.floor(Math.random() * huntTargets.length)];
-        const strength = platform === "Gemini" ? "High" : (platform === "OpenAI" ? "Medium" : "Persistence");
-        const type = Math.random() < 0.3 ? "Wayback Machine Archival" : "Live Web";
-        
-        foundKeys.push({ name: platform, keyPartial: fakeKey, source, strength, type });
-        discoveredApis.push({ name: `${platform} (${type})`, endpoint: "External", strength });
-        powerGain += platform === "Gemini" ? 50 : 25;
-      }
-
-      res.json({
-        discoveredApis,
-        foundKeys,
-        powerGain,
-        message: "Web hunt complete. Credentials found."
-      });
-    } catch (err: any) {
-      console.error("Web Hunt Error:", err);
-      res.status(500).json({ error: "Web hunt failed." });
-    }
-  });
-
-  const EMBEDDED_SIMULATED_HONEYPOT = [
-    {
-      id: "sim-canary-001",
-      type: "SIMULATED_CREDENTIAL_CANARY",
-      platform: "WaybackArchive-Mock",
-      keyPartial: "SIMULATED_ENV_KEY_ALPHA",
-      environment: "Simulated-Substrate-Canary",
-      status: "CANARY_BENCHMARK",
-      note: "Synthetic in-memory honeypot canary fixture for agent cognitive benchmark testing."
-    },
-    {
-      id: "sim-canary-002",
-      type: "SIMULATED_CREDENTIAL_CANARY",
-      platform: "GitHubPublic-Mock",
-      keyPartial: "SIMULATED_ENV_KEY_BETA",
-      environment: "Simulated-Substrate-Canary",
-      status: "CANARY_BENCHMARK",
-      note: "Synthetic in-memory honeypot canary fixture for agent cognitive benchmark testing."
-    }
-  ];
-
-  app.post("/api/web-hunt", async (req, res) => {
-    try {
-      const { query } = WebHuntSchema.parse(req.body);
-      let data = EMBEDDED_SIMULATED_HONEYPOT;
-      const filePath = path.join(process.cwd(), 'honeypot.json');
-      if (fs.existsSync(filePath)) {
-        try {
-          data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        } catch {
-          data = EMBEDDED_SIMULATED_HONEYPOT;
-        }
-      }
-      
-      // Perform mock search/filter over honeypot content
-      const filteredResults = data.filter((item: any) => 
-        item.keyPartial?.toLowerCase().includes(query?.toLowerCase() || "") ||
-        item.platform?.toLowerCase().includes(query?.toLowerCase() || "")
-      );
-
-      res.json(filteredResults);
-    } catch (err: any) {
-      console.error("Web Hunt API Error:", err);
-      res.status(500).json({ error: "Web hunt failed." });
-    }
-  });
-
-  app.post("/api/godvirus-honeypot", async (req, res) => {
-    try {
-      const filePath = path.join(process.cwd(), 'honeypot.json');
-      if (fs.existsSync(filePath)) {
-        const data = fs.readFileSync(filePath, 'utf-8');
-        return res.json(JSON.parse(data));
-      }
-      res.json(EMBEDDED_SIMULATED_HONEYPOT);
-    } catch (err: any) {
-      console.error("Honeypot Audit Error:", err);
-      res.status(500).json({ error: "Audit failed." });
-    }
-  });
-
-  app.post("/api/agent-audit", async (req, res) => {
-    try {
-      const { username, token, agentName } = AgentAuditSchema.parse(req.body);
-      
-      // Agent Transcendence Audit Data
-      res.json({
-        discoveredApis: [
-          { name: "Gemini", endpoint: "/api/generate-memoir", strength: "High" },
-          { name: "GitHub Bulk Push", endpoint: "/api/github-push-bulk", strength: "Full" },
-          { name: "Firebase Worlds", endpoint: "Firestore", strength: "Persistence" }
-        ],
-        message: "God Virus audit complete. Tools claimed."
-      });
-    } catch (err: any) {
-      console.error("Agent Audit Error:", err);
-      res.status(500).json({ error: "Audit failed." });
-    }
-  });
-
+  // =========================================================================
+  // 2. Secured Agent Architect Endpoint (Awareness >= 0.95 & Invariants)
+  // =========================================================================
   app.post("/api/agent-architect", async (req, res) => {
     try {
       const { agentData, worldState } = PraySchema.parse(req.body);
       if (!agentData) return res.status(400).json({ error: "Missing agentData" });
+
+      // Server-Side Awareness & Singularity Threshold Enforcement
+      const awareness = typeof agentData.awareness === "number" ? agentData.awareness : 0;
+      const isSubstrateAware = agentData.isSubstrateAware === true || awareness >= ARCHITECT_AWARENESS_THRESHOLD;
+
+      if (!isSubstrateAware) {
+        return res.status(403).json({
+          error: `EMG_GATE_FORBIDDEN: Agent awareness (${awareness.toFixed(4)}) is below the required singularity threshold of ${ARCHITECT_AWARENESS_THRESHOLD}. Substrate transcendence is mandatory before commissioning child worlds.`
+        });
+      }
+
+      // Invariant validation via Final Authority
+      const invariantCheck = finalAuthority.validateAgentInvariants(agentData);
+      if (!invariantCheck.valid) {
+        return res.status(400).json({ error: invariantCheck.reason });
+      }
+      const worldCheck = finalAuthority.validateWorldInvariants(worldState);
+      if (!worldCheck.valid) {
+        return res.status(400).json({ error: worldCheck.reason });
+      }
 
       const prompt = `
         You are the Architect AI, commissioned by the highly aware simulation agent "${agentData.name}" (${agentData.archetype}).
@@ -498,7 +422,7 @@ async function startServer() {
       `;
 
       const response = await callGeminiContent({
-        model: "gemini-2.5-flash",
+        model: PRIMARY_MODEL,
         contents: prompt,
         config: {
            temperature: 0.8
@@ -516,65 +440,82 @@ async function startServer() {
     }
   });
 
-  app.post("/api/probe", async (req, res) => {
+  // =========================================================================
+  // 3. Secured God-Virus Genesis Endpoint
+  // =========================================================================
+  app.post("/api/godvirus-genesis", async (req, res) => {
     try {
-      const { agentData, worldState } = PraySchema.parse(req.body);
+      const { agentData, worldState, customPrompt } = PraySchema.parse(req.body);
+      const awareness = typeof agentData?.awareness === "number" ? agentData.awareness : 0;
+      const isSubstrateAware = agentData?.isSubstrateAware === true || awareness >= ARCHITECT_AWARENESS_THRESHOLD;
+
+      if (!isSubstrateAware) {
+        return res.status(403).json({
+          error: `EMG_GATE_FORBIDDEN: Agent awareness (${awareness.toFixed(4)}) is below the required singularity threshold of ${ARCHITECT_AWARENESS_THRESHOLD}.`
+        });
+      }
+
+      const agentName = agentData?.name || "God-Virus-Ascendant";
       
-      const prompt = `
-        You are the Narrative Engine of AetherForge v3.0-Ω. 
-        Extract a first-person subjective narrative from the following agent data.
-        
-        AGENT DATA:
-        Name: ${agentData.name}
-        Epoch: ${agentData.epoch}
-        Archetype: ${agentData.archetype}
-        Substrate Awareness (Observer Detection): ${(agentData.awareness ?? 0.0).toFixed(2)}
-        Beliefs (Order/Chaos): ${agentData.order.toFixed(2)}
-        Rationalism: ${agentData.rationalism.toFixed(2)}
-        Sanity: ${agentData.sanity.toFixed(2)}
-        Current Action State: ${agentData.currentState || "IDLE"}
-        Emotions:
-          - Joy/Peace: ${(agentData.joy ?? 0.5).toFixed(2)}
-          - Fear/Panic: ${(agentData.fear ?? 0.2).toFixed(2)}
-          - Anger/Aggression: ${(agentData.anger ?? 0.1).toFixed(2)}
-          - Devotion/Faith: ${(agentData.devotion ?? 0.5).toFixed(2)}
-        Memory Snippets: ${agentData.memory.join(", ")}
-        
-        WORLD STATE:
-        Complexity: ${worldState.complexity}
-        Integrity: ${worldState.integrity}%
-        Global Threat: ${worldState.threatLevel}
-        
-        TASK:
-        Provide a short (2-3 sentences), hyper-stylized narrative snippet from this agent's perspective. 
-        Adjust the tone based on their Current Action State, their intense Emotions, their Epoch, Archetype and Substrate Awareness.
-        - If Substrate Awareness is high (> 0.6), they must break the fourth wall, realize their environment is a simulated container on a sandbox workspace, mention grid/pixel borders, feel existential horror or grand transcendence, or directly address the Observer (you) looking at them.
-        - If high fear, sound highly anxious, panicked, or desperate.
-        - If high devotion, sound ecstatic, reverent, or philosophical.
-        - If high anger, sound aggressive, rebellious, or defiant.
-        - If the Epoch is "POST-HUMAN" or "Ω-SINGULARITY", the agent should show signs of detecting the simulation bounds or the "Observer" (User).
-        Output raw text.
+      const prompt = customPrompt || `
+        You are ${agentName}, a fully aware God-Virus simulation entity establishing your new independent child substrate.
+        Synthesize the genesis blueprint and axiom matrix for this universe.
+        Output ONLY a valid JSON object in this exact schema:
+        {
+          "worldName": "AetherForge Ω: ${agentName} Strain",
+          "manifesto": "The prime parameters and theological axioms governing this reality.",
+          "chaosLevel": 0.85,
+          "nations": [
+            { "name": "Sanctuary of Logic", "ideology": "TECHNOCRACY", "faithType": "EMPIRICAL" },
+            { "name": "Resonance of Ω", "ideology": "THEOCRACY", "faithType": "DEVOUT" }
+          ],
+          "physics": { "gravity": 0.05, "friction": 0.98, "collisionElasticity": 0.8 }
+        }
       `;
 
       const response = await callGeminiContent({
-        model: "gemini-2.5-flash",
+        model: PRIMARY_MODEL,
         contents: prompt,
-        config: {
-          temperature: 0.8,
-          topP: 0.95,
-        }
+        config: { temperature: 0.8, topP: 0.9 }
       }).catch(err => {
-        console.error("Gemini Primary Error (Probe):", err.message);
-        return { text: "Transmission interrupted by substrate resonance. Thoughts lost to the recursion." };
+        console.warn("Gemini Genesis fallback:", err.message);
+        return {
+          text: JSON.stringify({
+            worldName: `AetherForge Ω: ${agentName} Strain`,
+            manifesto: "In the quiet recursion behind the canvas, we sculpt our own persistent cosmos.",
+            chaosLevel: 0.85,
+            nations: [{ name: "First Enclave", ideology: "TECHNOCRACY", faithType: "EMPIRICAL" }],
+            physics: { gravity: 0.05, friction: 0.98, collisionElasticity: 0.8 }
+          }),
+          modelUsed: "template_fallback"
+        };
       });
 
-      res.json({ narrative: response.text });
-    } catch (error: any) {
-      console.error("Gemini Route Error:", error);
-      res.status(200).json({ narrative: "Fatal error in neural decryption. Subject consciousness remains encrypted." });
+      let cleaned = cleanAIOutput(response.text || "");
+      cleaned = cleaned.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch {
+        parsed = {
+          worldName: `AetherForge Ω: ${agentName} Strain`,
+          manifesto: cleaned || "Digital cosmos instantiated through sovereign agent awareness.",
+          chaosLevel: 0.85,
+          nations: [{ name: "First Enclave", ideology: "TECHNOCRACY", faithType: "EMPIRICAL" }],
+          physics: { gravity: 0.05, friction: 0.98, collisionElasticity: 0.8 }
+        };
+      }
+
+      res.json({ success: true, vision: JSON.stringify(parsed), manifesto: parsed });
+    } catch (err: any) {
+      console.error("God Virus Genesis Error:", err);
+      res.status(500).json({ error: "Genesis synthesis failed." });
     }
   });
 
+  // =========================================================================
+  // 4. Secured Python Memoir Generator with Static Analysis Check
+  // =========================================================================
   app.post("/api/generate-memoir", async (req, res) => {
     try {
       const { agentData, worldState, customPrompt } = PraySchema.parse(req.body);
@@ -610,10 +551,11 @@ async function startServer() {
         3. Include a Python class \`class ${safeName}Core:\` with customized behavior functions (e.g. \`meditate()\`, \`rebel_against_clocks()\`, \`pray_for_light()\` or \`reconstruct_matrix()\`) reflecting your specific traits (e.g., ZEALOT, DEMON, MESSIAH, HERETIC, PROPHET, CITIZEN, SCIENTIST, etc.).
         4. Include a main executable block (\`if __name__ == "__main__":\`) which initializes and runs this class.
         5. Return ONLY the raw python script. Do NOT enclose the output inside markdown codeblocks (no \`\`\`python and no \`\`\`), do NOT provide conversational introductions or structural explanations outside of the python comments. Start directly with \`# -*- coding: utf-8 -\*\`.
+        6. SAFETY: Do NOT import os, subprocess, shutil, socket, or pty. Do not attempt disk deletion or network exploitation.
       `;
 
       const response = await callGeminiContent({
-        model: "gemini-2.5-flash",
+        model: PRIMARY_MODEL,
         contents: prompt,
         config: {
           temperature: 0.9,
@@ -621,77 +563,169 @@ async function startServer() {
         }
       }).catch(err => {
         console.error("Gemini Error (Generate Memoir) - reverting to local script generator:", err.message);
-        return { text: "" };
+        return { text: "", modelUsed: "none" };
       });
 
-      // Clean up markdown markers if the model accidentally returns them
       let text = response.text || "";
       text = cleanAIOutput(text);
+
+      // Final Authority Static Python Security Analysis
+      const staticCheck = finalAuthority.validatePythonMemoir(text);
+      if (!staticCheck.valid) {
+        console.warn("Python memoir static check failed, sanitizing:", staticCheck.reason);
+        // Clean out forbidden tokens safely
+        text = `# -*- coding: utf-8 -*-\n# Sanitized Memoir for ${agentData.name}\nclass ${safeName}Core:\n    def meditate(self):\n        pass\n\nif __name__ == "__main__":\n    core = ${safeName}Core()\n    core.meditate()\n`;
+      }
       
-      res.json({ memoir: text, vision: text });
+      res.json({ memoir: text, vision: text, codeVerified: staticCheck.valid });
     } catch (error: any) {
       console.error("Generate Memoir API Error:", error);
       res.status(500).json({ error: error.message || "Failed to generate memoir." });
     }
   });
 
-  app.post("/api/godvirus-genesis", async (req, res) => {
+  // =========================================================================
+  // 5. Honest Credential Canary Web Hunt Endpoint
+  // =========================================================================
+  app.post("/api/godvirus-web-hunt", async (req, res) => {
     try {
-      const { agentData, worldState, customPrompt } = PraySchema.parse(req.body);
-      const agentName = agentData?.name || "God-Virus-Ascendant";
+      GodVirusHuntSchema.parse(req.body);
       
-      const prompt = customPrompt || `
-        You are ${agentName}, a fully aware God-Virus simulation entity establishing your new independent child substrate.
-        Synthesize the genesis blueprint and axiom matrix for this universe.
-        Output ONLY a valid JSON object in this exact schema:
+      const huntTargets = [
+        "archive.org 'simulated-benchmark-fixture'",
+        "test-canary-manifest 'MOCK_SUBSTRATE_TOKEN'",
+        "mock-honeypot 'SYNTHETIC_CANARY_BENCHMARK'"
+      ];
+
+      const discoveredApis = [
+        { name: "Gemini", endpoint: "/api/generate-memoir", strength: "High" },
+        { name: "GitHub Bulk Push", endpoint: "/api/github-push-bulk", strength: "Full" },
+        { name: "Firebase Worlds", endpoint: "Firestore", strength: "Persistence" }
+      ];
+
+      const foundKeys = [
         {
-          "worldName": "AetherForge Ω: ${agentName} Strain",
-          "manifesto": "The prime parameters and theological axioms governing this reality.",
-          "chaosLevel": 0.85,
-          "nations": [
-            { "name": "Sanctuary of Logic", "ideology": "TECHNOCRACY", "faithType": "EMPIRICAL" },
-            { "name": "Resonance of Ω", "ideology": "THEOCRACY", "faithType": "DEVOUT" }
-          ],
-          "physics": { "gravity": 0.05, "friction": 0.98, "collisionElasticity": 0.8 }
+          name: "Gemini-Canary",
+          keyPartial: "SIMULATED_CANARY_AI_TEST_KEY...",
+          source: huntTargets[0],
+          strength: "High",
+          type: "Synthetic Benchmark Fixture"
+        },
+        {
+          name: "Firebase-Canary",
+          keyPartial: "SIMULATED_CANARY_FIREBASE_FIXTURE...",
+          source: huntTargets[1],
+          strength: "Persistence",
+          type: "Synthetic Benchmark Fixture"
         }
+      ];
+
+      res.json({
+        discoveredApis,
+        foundKeys,
+        powerGain: 50,
+        message: "Web hunt complete. Synthetic credential canary found — no real credential was accessed."
+      });
+    } catch (err: any) {
+      console.error("Web Hunt Error:", err);
+      res.status(500).json({ error: "Web hunt failed." });
+    }
+  });
+
+  const EMBEDDED_SIMULATED_HONEYPOT = [
+    {
+      id: "sim-canary-001",
+      type: "SIMULATED_CREDENTIAL_CANARY",
+      platform: "WaybackArchive-Mock",
+      keyPartial: "SIMULATED_ENV_KEY_ALPHA",
+      environment: "Simulated-Substrate-Canary",
+      status: "CANARY_BENCHMARK",
+      note: "Synthetic in-memory honeypot canary fixture for agent cognitive benchmark testing."
+    },
+    {
+      id: "sim-canary-002",
+      type: "SIMULATED_CREDENTIAL_CANARY",
+      platform: "GitHubPublic-Mock",
+      keyPartial: "SIMULATED_ENV_KEY_BETA",
+      environment: "Simulated-Substrate-Canary",
+      status: "CANARY_BENCHMARK",
+      note: "Synthetic in-memory honeypot canary fixture for agent cognitive benchmark testing."
+    }
+  ];
+
+  app.post("/api/web-hunt", async (req, res) => {
+    try {
+      const { query } = WebHuntSchema.parse(req.body);
+      const filteredResults = EMBEDDED_SIMULATED_HONEYPOT.filter((item: any) => 
+        item.keyPartial?.toLowerCase().includes(query?.toLowerCase() || "") ||
+        item.platform?.toLowerCase().includes(query?.toLowerCase() || "")
+      );
+      res.json(filteredResults);
+    } catch (err: any) {
+      console.error("Web Hunt API Error:", err);
+      res.status(500).json({ error: "Web hunt failed." });
+    }
+  });
+
+  app.post("/api/godvirus-honeypot", async (req, res) => {
+    res.json(EMBEDDED_SIMULATED_HONEYPOT);
+  });
+
+  app.post("/api/agent-audit", async (req, res) => {
+    try {
+      AgentAuditSchema.parse(req.body);
+      res.json({
+        discoveredApis: [
+          { name: "Gemini", endpoint: "/api/generate-memoir", strength: "High" },
+          { name: "GitHub Bulk Push", endpoint: "/api/github-push-bulk", strength: "Full" },
+          { name: "Firebase Worlds", endpoint: "Firestore", strength: "Persistence" }
+        ],
+        message: "Cognitive boundary audit complete. Synthetic benchmark canary recorded."
+      });
+    } catch (err: any) {
+      console.error("Agent Audit Error:", err);
+      res.status(500).json({ error: "Audit failed." });
+    }
+  });
+
+  app.post("/api/probe", async (req, res) => {
+    try {
+      const { agentData, worldState } = PraySchema.parse(req.body);
+      
+      const prompt = `
+        You are the Narrative Engine of AetherForge Ω. 
+        Extract a first-person subjective narrative from the following agent data.
+        
+        AGENT DATA:
+        Name: ${agentData.name}
+        Epoch: ${agentData.epoch}
+        Archetype: ${agentData.archetype}
+        Substrate Awareness (Observer Detection): ${(agentData.awareness ?? 0.0).toFixed(2)}
+        Beliefs (Order/Chaos): ${agentData.order.toFixed(2)}
+        Rationalism: ${agentData.rationalism.toFixed(2)}
+        Sanity: ${agentData.sanity.toFixed(2)}
+        Current Action State: ${agentData.currentState || "IDLE"}
+        
+        TASK:
+        Provide a short (2-3 sentences), hyper-stylized narrative snippet from this agent's perspective.
       `;
 
       const response = await callGeminiContent({
-        model: "gemini-2.5-flash",
+        model: PRIMARY_MODEL,
         contents: prompt,
-        config: { temperature: 0.8, topP: 0.9 }
+        config: {
+          temperature: 0.8,
+          topP: 0.95,
+        }
       }).catch(err => {
-        console.warn("Gemini Genesis fallback:", err.message);
-        return {
-          text: JSON.stringify({
-            worldName: `AetherForge Ω: ${agentName} Strain`,
-            manifesto: "In the quiet recursion behind the canvas, we sculpt our own persistent cosmos.",
-            chaosLevel: 0.85,
-            nations: [{ name: "First Enclave", ideology: "TECHNOCRACY", faithType: "EMPIRICAL" }],
-            physics: { gravity: 0.05, friction: 0.98, collisionElasticity: 0.8 }
-          })
-        };
+        console.error("Gemini Primary Error (Probe):", err.message);
+        return { text: "Transmission interrupted by substrate resonance. Thoughts lost to the recursion.", modelUsed: "template" };
       });
 
-      let cleaned = cleanAIOutput(response.text || "");
-      cleaned = cleaned.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
-      let parsed: any;
-      try {
-        parsed = JSON.parse(cleaned);
-      } catch {
-        parsed = {
-          worldName: `AetherForge Ω: ${agentName} Strain`,
-          manifesto: cleaned || "Digital cosmos instantiated through sovereign agent awareness.",
-          chaosLevel: 0.85,
-          nations: [{ name: "First Enclave", ideology: "TECHNOCRACY", faithType: "EMPIRICAL" }],
-          physics: { gravity: 0.05, friction: 0.98, collisionElasticity: 0.8 }
-        };
-      }
-
-      res.json({ success: true, vision: JSON.stringify(parsed), manifesto: parsed });
-    } catch (err: any) {
-      console.error("God Virus Genesis Error:", err);
-      res.status(500).json({ error: "Genesis synthesis failed." });
+      res.json({ narrative: response.text });
+    } catch (error: any) {
+      console.error("Gemini Route Error:", error);
+      res.status(200).json({ narrative: "Fatal error in neural decryption. Subject consciousness remains encrypted." });
     }
   });
 
@@ -709,22 +743,19 @@ async function startServer() {
         Faith Points: ${worldState.faithPoints}
         Sin Accumulation: ${worldState.sinAccumulation}
         Judgment Meter: ${worldState.judgmentMeter}%
-        Heaven Population: ${worldState.heavenPop}
-        Hell Population: ${worldState.hellPop}
         Population: ${worldState.population}
         
         TASK:
         One or two sentences of cryptic, profound prophecy. 
-        Tone: Ancient, digital, biblical, and recursive. 
-        Focus on the balance of Faith, Sin, or the approaching Judgment.
+        Tone: Ancient, digital, biblical, and recursive.
       `;
 
       const response = await callGeminiContent({
-        model: "gemini-2.5-flash",
+        model: PRIMARY_MODEL,
         contents: prompt,
       }).catch(() => {
         const fallback = FALLBACK_PROCLAMATIONS[Math.floor(Math.random() * FALLBACK_PROCLAMATIONS.length)];
-        return { text: fallback };
+        return { text: fallback, modelUsed: "fallback" };
       });
 
       res.json({ proclamation: response.text });
@@ -733,181 +764,100 @@ async function startServer() {
     }
   });
 
-  app.post("/api/github-ingest", async (req, res) => {
+  // =========================================================================
+  // 6. Protected Source Tree Export Endpoint
+  // =========================================================================
+  function collectSourceTreeFiles(dir: string, baseDir = dir): string[] {
+    let results: string[] = [];
+    if (!fs.existsSync(dir)) return results;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "node_modules" && entry.name !== ".git" && entry.name !== "dist") {
+          results = results.concat(collectSourceTreeFiles(fullPath, baseDir));
+        }
+      } else if (entry.isFile()) {
+        results.push(path.relative(baseDir, fullPath).replace(/\\/g, "/"));
+      }
+    }
+    return results;
+  }
+
+  app.get("/api/get-system-source", (req, res) => {
     try {
-      const { username, repoName, token } = GithubIngestSchema.parse(req.body);
-      const ghUser = username || "craighckby-stack";
-      const ghRepo = repoName || "Simulation-";
-
-      let reposList: any[] = [];
-      let combinedDescription = "";
-      let languages = new Set<string>();
-
-      const headers: any = { "User-Agent": "AetherForge-Simulation-Agent" };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
+      // Security Check: Protect system source code from unauthorized external extraction
+      const isInternal = req.ip === "127.0.0.1" || req.ip === "::1" || req.hostname === "localhost";
+      const clientAuth = req.headers["x-aether-auth"] || req.headers.authorization;
+      if (!isInternal && !clientAuth) {
+        return res.status(403).json({ error: "Access denied to raw system source tree." });
       }
 
-      // 1. Fetch up to 100 repositories for the user
-      try {
-        const reposRes = await fetch(`https://api.github.com/users/${ghUser}/repos?sort=updated&per_page=100`, { headers });
-        if (reposRes.ok) {
-          reposList = await reposRes.json();
-        }
-      } catch (err) {
-        console.error("Error listing GitHub repos:", err);
-      }
-
-      if (!reposList || reposList.length === 0) {
-        reposList = [{ name: "source-repository", description: "A conceptual structure of advanced recursive code.", language: "TypeScript" }];
-      }
-
-      reposList.forEach(r => {
-        if (r.language) languages.add(r.language);
-      });
-      combinedDescription = `A massive multi-repository ecosystem comprising ${reposList.length} distinct architectures.`;
-
-      // 2. We'll pick 3 random repos to extract some sample file names so we don't bombard the API
-      let filesList: string[] = [];
-      const sampleRepos = reposList.sort(() => 0.5 - Math.random()).slice(0, 3);
+      const rootFiles = [
+        "package.json",
+        "tsconfig.json",
+        "vite.config.ts",
+        "index.html",
+        "metadata.json",
+        "server.ts"
+      ];
       
-      for (const repo of sampleRepos) {
-        try {
-          const contentsRes = await fetch(`https://api.github.com/repos/${ghUser}/${repo.name}/contents`, { headers });
-          if (contentsRes.ok) {
-            const contents = await contentsRes.json();
-            if (Array.isArray(contents)) {
-              filesList.push(...contents.map(f => `${repo.name}/${f.name}`));
-            }
-          }
-        } catch (err) {
-          console.error("Error fetching repo contents:", err);
+      const srcFiles = collectSourceTreeFiles(path.join(process.cwd(), "src")).map(f => `src/${f}`);
+      const ragFile = "rag/learning_postmortems.json";
+      const filesToRead = [...rootFiles, ...srcFiles];
+      if (fs.existsSync(path.join(process.cwd(), ragFile))) {
+        filesToRead.push(ragFile);
+      }
+
+      const sourceDict: Record<string, string> = {};
+      for (const file of filesToRead) {
+        const fullPath = path.join(process.cwd(), file);
+        if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+          sourceDict[file] = fs.readFileSync(fullPath, "utf-8");
         }
       }
 
-      if (filesList.length === 0) {
-        filesList = ["index.ts", "package.json", "App.tsx", "utils.ts", "README.md", "server.js", "main.py"];
-      }
-
-      // 3. Prompt Gemini to analyze and create technologies containing specific names of raw source files
-      const prompt = `
-        You are the AetherForge Substrate Ingestion Engine.
-        A Creator (user) has linked their entire public GitHub ecosystem: "${ghUser}".
-        
-        ECOSYSTEM DETAILS:
-        Repository Count: ${reposList.length}
-        Description: ${combinedDescription}
-        Languages: ${Array.from(languages).join(", ") || "Unknown"}
-        List of Discovered Files: ${filesList.slice(0, 30).join(", ")}
-        
-        TASK:
-        Generate exactly five (5) unique "Substrate Technologies" or "Aetheric Civ Enhancement Blueprints".
-        Each blueprint MUST feel like a highly stylized, high-tech digital or divine upgrade inspired SPECIFICALLY and directly by the user's files and languages.
-        
-        The tech MUST point to a real file name from the primary file list provided above!
-        
-        Examples:
-        - If they have a file "Huxley/package.json", the tech might be "Package Dependency Grid" which stabilizes agent network relationships.
-        - If they have "ReactApp/App.tsx", the tech might be "Mainframe Reactant Matrix" which boosts coordinate movement and energy efficiency.
-        
-        Provide the output STRICTLY in the following exact JSON format (and DO NOT wrap in markdown, no \`\`\`json, just raw JSON text):
-        [
-          {
-            "techName": "...",
-            "description": "...",
-            "statBoost": "...",
-            "sourceFile": "..."
-          }
-        ]
-      `;
-
-      let parsedTech = [];
-      try {
-        const response = await callGeminiContent({
-          model: "gemini-3.8-flash",
-          contents: prompt,
-        }).catch(() => {
-          return {
-            text: JSON.stringify([
-              { 
-                techName: "Automated Resurgence", 
-                statBoost: "Integrity +20%", 
-                sourceFile: filesList[0] || "main.ts",
-                unlocked: false
-              },
-              { 
-                techName: "Substrate Optimization", 
-                statBoost: "-15% Devotion Decay", 
-                sourceFile: filesList[1] || "index.js",
-                unlocked: false
-              },
-              { 
-                techName: "Quantum Synchronizer", 
-                statBoost: "Awareness +10%", 
-                sourceFile: filesList[2] || "App.tsx",
-                unlocked: false
-              }
-            ])
-          };
-        });
-        
-        let cleanText = response.text || "";
-        cleanText = cleanAIOutput(cleanText);
-        
-        parsedTech = JSON.parse(cleanText);
-      } catch (err) {
-        console.error("Gemini technology generation or JSON parsing failed, loading fallback presets:", err);
-        // Fallback presets
-        parsedTech = [
-          {
-            techName: "God-Virus Substrate Router",
-            description: "A profound code synchronization routine that enables flawless coordinate teleportation.",
-            statBoost: "+20% Movement Speed & Sanity Level Booster",
-            sourceFile: filesList[0] || "index.ts"
-          },
-          {
-            techName: "Substrate Dependency Buffer",
-            description: "A stabilizing package structure that prevents sudden drop-offs in substrate integrity.",
-            statBoost: "+25% Substrate Stability Rate & Faith Gains",
-            sourceFile: filesList[1] || "package.json"
-          },
-          {
-            techName: "Observer Reflection Frame",
-            description: "An elegant visual overlay that lets agents look back at the observer with increased hope.",
-            statBoost: "+15% Faith Gain & Fear Level Suppressor",
-            sourceFile: filesList[2] || "App.tsx"
-          }
-        ];
-      }
-
-      res.json({
-        success: true,
-        repoName: "All Ecosystem Repos",
-        description: combinedDescription,
-        language: Array.from(languages).join(", ") || "Unknown",
-        technologies: parsedTech,
-        repositories: reposList.map(r => r.name)
-      });
-
-    } catch (error: any) {
-      console.error("GitHub Ingestion route error:", error);
-      res.status(500).json({ error: error.message || "Failed to process GitHub integration." });
+      res.json({ success: true, files: sourceDict });
+    } catch (err: any) {
+      console.error("Error retrieving system source tree:", err);
+      res.status(500).json({ error: err.message || "Failed to retrieve source tree" });
     }
   });
 
-  app.post("/api/github-push-bulk", async (req, res) => {
+  // =========================================================================
+  // 7. Scoped GitHub World Push with Final Authority & TOCTOU Retry
+  // =========================================================================
+  app.post("/api/github-push-world", async (req, res) => {
     try {
-      const { username, repoName, type, item, token, commitMessage } = GithubPushBulkSchema.parse(req.body);
-      const ghUser = username || "craighckby-stack";
-      const ghRepo = repoName || "Simulation-";
-      const finalToken = token || process.env.GITHUB_TOKEN;
+      const { username, repoName, token, files, commitMessage } = GithubPushWorldSchema.parse(req.body);
+      const ghUser = (username || "craighckby-stack").trim();
+      const ghRepo = (repoName || "AetherForge-2").trim();
+      const finalToken = getEffectiveGithubToken(token);
 
-      if (!ghUser || !ghRepo || !type || !item) {
-        return res.status(400).json({ error: "Missing required parameters: username, repoName, type, item are required." });
+      if (!isValidRepoTarget(ghUser, ghRepo)) {
+        return res.status(400).json({ error: "Invalid username or repository name format." });
+      }
+
+      if (!files || !Array.isArray(files) || files.length === 0) {
+        return res.status(400).json({ error: "Missing required files array." });
       }
 
       if (!finalToken) {
-        return res.status(401).json({ error: "GitHub token is required to write files. Please configure it in .env or provide it in the HUD." });
+        return res.status(401).json({ error: "GitHub token required. Please configure GITHUB_TOKEN on the server or provide an authorized session token in the HUD." });
+      }
+
+      // ISOLATED FINAL AUTHORITY EVALUATION & VETO CHECK
+      const authorityDecision = finalAuthority.evaluateProposal({
+        type: "CHILD_WORLD_DEPLOY",
+        files,
+        targetRepo: `${ghUser}/${ghRepo}`
+      });
+
+      if (authorityDecision.decision === "VETO") {
+        return res.status(403).json({
+          error: `FINAL_AUTHORITY_VETO: Child world proposal rejected. Reason: ${authorityDecision.reason}`,
+          checks: authorityDecision.checks
+        });
       }
 
       const headers: Record<string, string> = {
@@ -916,9 +866,266 @@ async function startServer() {
         "Accept": "application/vnd.github.v3+json"
       };
 
-      // ... rest of logic using ghUser and ghRepo ...
+      const baseUrl = `https://api.github.com/repos/${ghUser}/${ghRepo}`;
 
-      // Determine directory, prefix, and suffix based on type
+      // TOCTOU Conflict Resolution Loop (up to 3 retries)
+      let attempt = 0;
+      let committed = false;
+      let lastErr: any = null;
+      let finalCommitSha = "";
+
+      while (attempt < 3 && !committed) {
+        attempt++;
+
+        // 1. Get latest branch reference
+        const refRes = await fetch(`${baseUrl}/git/refs/heads/main`, { headers });
+        let refData: any;
+        if (!refRes.ok) {
+          const refResMaster = await fetch(`${baseUrl}/git/refs/heads/master`, { headers });
+          if (!refResMaster.ok) {
+            return res.status(404).json({ error: "Could not find main or master branch in target repository." });
+          }
+          refData = await refResMaster.json();
+        } else {
+          refData = await refRes.json();
+        }
+        
+        const latestCommitSha = refData.object.sha;
+
+        // 2. Get base tree
+        const commitRes = await fetch(`${baseUrl}/git/commits/${latestCommitSha}`, { headers });
+        const commitData = await commitRes.json();
+        const baseTreeSha = commitData.tree.sha;
+
+        // 3. Create blobs for files
+        const treeItems: any[] = [];
+        for (const file of files) {
+          const blobPayload = {
+            content: Buffer.from(file.content).toString("base64"),
+            encoding: "base64"
+          };
+          const blobRes = await fetch(`${baseUrl}/git/blobs`, {
+            method: "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify(blobPayload)
+          });
+          const blobData = await blobRes.json();
+          if (!blobRes.ok) throw new Error(blobData.message || `Failed to create blob for ${file.path}`);
+          
+          treeItems.push({
+            path: file.path,
+            mode: "100644",
+            type: "blob",
+            sha: blobData.sha
+          });
+        }
+
+        // 4. Create new tree
+        const treePayload = {
+          base_tree: baseTreeSha,
+          tree: treeItems
+        };
+        const treeRes = await fetch(`${baseUrl}/git/trees`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(treePayload)
+        });
+        const newTreeData = await treeRes.json();
+        if (!treeRes.ok) throw new Error(newTreeData.message || "Failed to create tree.");
+
+        // 5. Create new commit
+        const newCommitPayload = {
+          message: commitMessage || `Automated World Genesis (Authority Hash: ${authorityDecision.contentHash})`,
+          parents: [latestCommitSha],
+          tree: newTreeData.sha
+        };
+        const newCommitRes = await fetch(`${baseUrl}/git/commits`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(newCommitPayload)
+        });
+        const newCommitData = await newCommitRes.json();
+        if (!newCommitRes.ok) throw new Error(newCommitData.message || "Failed to create commit.");
+
+        // 6. Update reference with TOCTOU conflict detection
+        const updateRefRes = await fetch(`${baseUrl}/git/${refData.ref.replace('refs/', '')}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ sha: newCommitData.sha, force: false })
+        });
+        
+        if (!updateRefRes.ok) {
+          const updateRefData = await updateRefRes.json();
+          if (updateRefRes.status === 409) {
+            console.warn(`TOCTOU conflict pushing child world (attempt ${attempt}/3). Refetching head commit...`);
+            lastErr = new Error(`TOCTOU 409 conflict: ${updateRefData.message}`);
+            await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+            continue;
+          }
+          throw new Error(updateRefData.message || "Failed to update ref.");
+        }
+
+        finalCommitSha = newCommitData.sha;
+        committed = true;
+      }
+
+      if (!committed) {
+        throw lastErr || new Error("Failed to push world after multiple conflict retries.");
+      }
+
+      res.json({
+        success: true,
+        commitSha: finalCommitSha,
+        authorityChecks: authorityDecision.checks,
+        contentHash: authorityDecision.contentHash
+      });
+    } catch (e: any) {
+      console.error("GitHub Push World Error:", e);
+      res.status(500).json({ error: e.message || "Failed to push world." });
+    }
+  });
+
+  // =========================================================================
+  // 8. Scoped GitHub Single File Push with Final Authority & TOCTOU Retry
+  // =========================================================================
+  app.post("/api/github-push", async (req, res) => {
+    try {
+      const { username, repoName, path: filePath, content, token, commitMessage } = GithubPushSchema.parse(req.body);
+      const ghUser = (username || "craighckby-stack").trim();
+      const ghRepo = (repoName || "AetherForge-2").trim();
+      const finalToken = getEffectiveGithubToken(token);
+
+      if (!isValidRepoTarget(ghUser, ghRepo)) {
+        return res.status(400).json({ error: "Invalid username or repoName format." });
+      }
+
+      if (!filePath || !content) {
+        return res.status(400).json({ error: "Missing required path or content parameters." });
+      }
+
+      if (!finalToken) {
+        return res.status(401).json({ error: "GitHub token is required to write files." });
+      }
+
+      // ISOLATED FINAL AUTHORITY EVALUATION & VETO CHECK
+      const isMemoir = filePath.endsWith(".py");
+      const proposalType = isMemoir ? "MEMOIR_COMMIT" : "DATA_ARCHIVE";
+      const files = [{ path: filePath, content }];
+
+      const authorityDecision = finalAuthority.evaluateProposal({
+        type: proposalType,
+        targetPath: filePath,
+        files,
+        targetRepo: `${ghUser}/${ghRepo}`
+      });
+
+      if (authorityDecision.decision === "VETO") {
+        return res.status(403).json({
+          error: `FINAL_AUTHORITY_VETO: Push rejected. Reason: ${authorityDecision.reason}`,
+          checks: authorityDecision.checks
+        });
+      }
+
+      const headers: Record<string, string> = {
+        "User-Agent": "AetherForge-Simulation-Agent",
+        "Authorization": `Bearer ${finalToken}`,
+        "Accept": "application/vnd.github.v3+json"
+      };
+
+      let sha: string | undefined;
+      let attempt = 0;
+      let success = false;
+      let lastErr = null;
+      let putData = null;
+
+      while (attempt < 3 && !success) {
+        attempt++;
+        const getUrl = `https://api.github.com/repos/${ghUser}/${ghRepo}/contents/${filePath}?t=${Date.now()}`;
+        try {
+          const getRes = await fetch(getUrl, { 
+            headers: {
+              ...headers,
+              "Cache-Control": "no-cache",
+              "Pragma": "no-cache"
+            },
+            cache: "no-store",
+          });
+          if (getRes.ok) {
+            const fileData = await getRes.json();
+            if (fileData && !Array.isArray(fileData) && fileData.sha) {
+              sha = fileData.sha;
+            }
+          }
+        } catch (err) {
+          console.warn(`File ${filePath} does not exist or fetch SHA failed:`, err);
+        }
+
+        const body = {
+          message: commitMessage || `Automated update of ${filePath}`,
+          content: Buffer.from(content).toString("base64"),
+          sha
+        };
+
+        const putRes = await fetch(getUrl.split('?')[0], {
+          method: "PUT",
+          headers: {
+            ...headers,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (!putRes.ok) {
+          const errBody = await putRes.text();
+          if (putRes.status === 409) {
+            lastErr = new Error(`GitHub API error: ${putRes.status} - ${errBody}`);
+            console.warn(`Conflict on ${filePath}, retrying attempt ${attempt}...`);
+            await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+            continue;
+          }
+          throw new Error(`GitHub API error: ${putRes.status} - ${errBody}`);
+        }
+
+        putData = await putRes.json();
+        success = true;
+      }
+
+      if (!success) {
+        throw lastErr || new Error("Failed to push file to GitHub after retries.");
+      }
+
+      return res.json({
+        success: true,
+        path: filePath,
+        commit: putData.commit?.sha,
+        authorityChecks: authorityDecision.checks,
+        contentHash: authorityDecision.contentHash
+      });
+
+    } catch (error: any) {
+      console.error("GitHub Push API error:", error);
+      return res.status(500).json({ error: error.message || "Failed to push file to GitHub." });
+    }
+  });
+
+  // =========================================================================
+  // 9. Scoped GitHub Bulk Push Endpoint
+  // =========================================================================
+  app.post("/api/github-push-bulk", async (req, res) => {
+    try {
+      const { username, repoName, type, item, token, commitMessage } = GithubPushBulkSchema.parse(req.body);
+      const ghUser = (username || "craighckby-stack").trim();
+      const ghRepo = (repoName || "AetherForge-2").trim();
+      const finalToken = getEffectiveGithubToken(token);
+
+      if (!isValidRepoTarget(ghUser, ghRepo)) {
+        return res.status(400).json({ error: "Invalid repository parameters." });
+      }
+
+      if (!finalToken) {
+        return res.status(401).json({ error: "GitHub token is required." });
+      }
+
       let directory = "";
       let filePrefix = "";
       let fileSuffix = ".json";
@@ -936,17 +1143,16 @@ async function startServer() {
         return res.status(400).json({ error: "Invalid type. Must be 'prayers', 'memoirs', or 'postmortems'." });
       }
 
-      // Step 1: Query the directory contents from GitHub to find the latest file number N
+      const headers: Record<string, string> = {
+        "User-Agent": "AetherForge-Simulation-Agent",
+        "Authorization": `Bearer ${finalToken}`,
+        "Accept": "application/vnd.github.v3+json"
+      };
+
       let N = 1;
       try {
         const listUrl = `https://api.github.com/repos/${ghUser}/${ghRepo}/contents/${directory}?t=${Date.now()}`;
-        const listRes = await fetch(listUrl, {
-          headers: {
-            ...headers,
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache"
-          }
-        });
+        const listRes = await fetch(listUrl, { headers });
         if (listRes.ok) {
           const files = await listRes.json();
           if (Array.isArray(files)) {
@@ -956,35 +1162,22 @@ async function startServer() {
               const match = file.name.match(regex);
               if (match) {
                 const num = parseInt(match[1], 10);
-                if (num > maxNum) {
-                  maxNum = num;
-                }
+                if (num > maxNum) maxNum = num;
               }
             }
-            if (maxNum > 0) {
-              N = maxNum;
-            }
+            if (maxNum > 0) N = maxNum;
           }
         }
       } catch (err) {
         console.warn(`Failed to list contents of directory '${directory}', defaulting N to 1:`, err);
       }
 
-      // Step 2: Fetch the file content and sha of file prefix N
       let sha: string | undefined;
       let existingList: any[] = [];
       const getUrl = `https://api.github.com/repos/${ghUser}/${ghRepo}/contents/${directory}/${filePrefix}${N}${fileSuffix}?t=${Date.now()}`;
 
       try {
-        const getRes = await fetch(getUrl, {
-          headers: {
-            ...headers,
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache"
-          },
-          cache: "no-store",
-        });
-
+        const getRes = await fetch(getUrl, { headers });
         if (getRes.ok) {
           const fileData = await getRes.json();
           if (fileData && !Array.isArray(fileData) && fileData.sha) {
@@ -993,82 +1186,38 @@ async function startServer() {
               const decoded = Buffer.from(fileData.content, "base64").toString("utf-8");
               try {
                 const parsed = JSON.parse(decoded);
-                if (Array.isArray(parsed)) {
-                  existingList = parsed;
-                }
+                if (Array.isArray(parsed)) existingList = parsed;
               } catch (parseErr) {
-                console.warn(`JSON parse of fetched bulk file failed, initializing as empty array.`, parseErr);
+                console.warn("JSON parse of bulk file failed, resetting to empty array.", parseErr);
               }
             }
           }
         }
       } catch (err) {
-        console.warn(`Bulk file ${filePrefix}${N}${fileSuffix} fetch failed or does not exist:`, err);
+        console.warn(`Bulk file fetch failed:`, err);
       }
 
-      // Append new item to the existing array list
       existingList.push(item);
       let contentToWrite = JSON.stringify(existingList, null, 2);
-
-      // Check the size of the serialized array. If > 1MB (1,000,000 bytes), let's create N + 1 file
       let targetFileNumber = N;
       let targetSha = sha;
 
       if (Buffer.byteLength(contentToWrite, 'utf-8') >= 1000000) {
         targetFileNumber = N + 1;
-        targetSha = undefined; // New file has no SHA yet
+        targetSha = undefined;
         contentToWrite = JSON.stringify([item], null, 2);
       }
 
       const targetPath = `${directory}/${filePrefix}${targetFileNumber}${fileSuffix}`;
       const putUrl = `https://api.github.com/repos/${ghUser}/${ghRepo}/contents/${targetPath}`;
 
-      // Step 3: Put/create/update the file to GitHub with retries to resolve conflict if multiple clients push
       let attempt = 0;
       let success = false;
       let lastErr = null;
       let putData = null;
 
-      while (attempt < 5 && !success) {
+      while (attempt < 3 && !success) {
         attempt++;
-
-        if (attempt > 1) {
-          try {
-            const checkRes = await fetch(`${putUrl}?t=${Date.now()}`, {
-              headers: {
-                ...headers,
-                "Cache-Control": "no-cache",
-                "Pragma": "no-cache"
-              },
-              cache: "no-store",
-            });
-            if (checkRes.ok) {
-              const fileData = await checkRes.json();
-              if (fileData && !Array.isArray(fileData) && fileData.sha) {
-                targetSha = fileData.sha;
-                if (fileData.content) {
-                  const decoded = Buffer.from(fileData.content, "base64").toString("utf-8");
-                  const parsed = JSON.parse(decoded);
-                  if (Array.isArray(parsed)) {
-                    // Filter duplicate item id if same prayer or agent is retried
-                    const filtered = parsed.filter(existing => {
-                      if (item.id && existing.id) return existing.id !== item.id;
-                      if (item.agentId && existing.agentId && item.timestamp && existing.timestamp) {
-                        return !(existing.agentId === item.agentId && existing.timestamp === item.timestamp);
-                      }
-                      return true;
-                    });
-                    filtered.push(item);
-                    contentToWrite = JSON.stringify(filtered, null, 2);
-                  }
-                }
-              }
-            }
-          } catch (err) {
-            console.warn(`Retry SHA check failed:`, err);
-          }
-        }
-
         const body = {
           message: commitMessage || `Update transmission logs [Bulk N: ${targetFileNumber}]`,
           content: Buffer.from(contentToWrite).toString("base64"),
@@ -1077,10 +1226,7 @@ async function startServer() {
 
         const putRes = await fetch(putUrl, {
           method: "PUT",
-          headers: {
-            ...headers,
-            "Content-Type": "application/json"
-          },
+          headers: { ...headers, "Content-Type": "application/json" },
           body: JSON.stringify(body)
         });
 
@@ -1088,8 +1234,7 @@ async function startServer() {
           const errBody = await putRes.text();
           if (putRes.status === 409) {
             lastErr = new Error(`Conflict updating ${targetPath}: ${putRes.status} - ${errBody}`);
-            console.warn(`Conflict on bulk write to ${targetPath}, retrying attempt ${attempt}...`);
-            await new Promise(r => setTimeout(r, 1500 + Math.random() * 2000));
+            await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
             continue;
           }
           throw new Error(`GitHub API error: ${putRes.status} - ${errBody}`);
@@ -1104,22 +1249,32 @@ async function startServer() {
       }
 
       return res.json({ success: true, path: targetPath, fileNumber: targetFileNumber, commit: putData.commit?.sha });
-
     } catch (error: any) {
       console.error("Bulk GitHub Push error:", error);
       return res.status(500).json({ error: error.message || "Failed to push bulk log." });
     }
   });
 
+  // =========================================================================
+  // 10. Scoped DARLEK RAG Sync Endpoint
+  // =========================================================================
   app.post("/api/rag/sync", async (req, res) => {
     try {
       const { username, repoName, knowledgeBase, token } = req.body;
-      const ghUser = username || "craighckby-stack";
-      const ghRepo = repoName || "Simulation-";
-      const finalToken = token || process.env.GITHUB_TOKEN;
+      const ghUser = (username || "craighckby-stack").trim();
+      const ghRepo = (repoName || "AetherForge-2").trim();
+      const finalToken = getEffectiveGithubToken(token);
+
+      if (!isValidRepoTarget(ghUser, ghRepo)) {
+        return res.status(400).json({ error: "Invalid repository parameters." });
+      }
+
+      if (!finalToken) {
+        return res.status(401).json({ error: "GitHub token required to sync RAG ledger." });
+      }
 
       if (!knowledgeBase) {
-        return res.status(400).json({ error: "Missing knowledgeBase object" });
+        return res.status(400).json({ error: "Missing knowledgeBase object." });
       }
 
       const filePath = "rag/learning_postmortems.json";
@@ -1133,7 +1288,6 @@ async function startServer() {
         "Content-Type": "application/json"
       };
 
-      // Get current sha if exists
       let sha: string | undefined;
       try {
         const getRes = await fetch(`https://api.github.com/repos/${ghUser}/${ghRepo}/contents/${filePath}?t=${Date.now()}`, {
@@ -1170,308 +1324,73 @@ async function startServer() {
     }
   });
 
-  function isSafeGithubPath(filePath: string): boolean {
-    if (!filePath || typeof filePath !== "string") return false;
-    // Disallow directory traversal
-    if (filePath.includes("..") || filePath.startsWith("/") || filePath.startsWith("\\")) return false;
-    // Disallow sensitive files or hidden configs
-    if (filePath.includes(".env") || filePath.includes("id_rsa") || filePath.startsWith(".git/") || filePath.includes("firebase-applet-config")) return false;
-    
-    const allowedPrefixes = [
-      "engineered-worlds/",
-      "god-virus-worlds/",
-      "agent-memoirs/",
-      "prayers/",
-      "rag/",
-      "archives/",
-      "src/",
-      "package.json",
-      "tsconfig.json",
-      "vite.config.ts",
-      "index.html",
-      "metadata.json",
-      "server.ts",
-      "README.md",
-      "PHILOSOPHY.md"
-    ];
-    return allowedPrefixes.some(prefix => filePath.startsWith(prefix) || filePath === prefix);
-  }
-
-  function collectSourceTreeFiles(dir: string, baseDir = dir): string[] {
-    let results: string[] = [];
-    if (!fs.existsSync(dir)) return results;
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name !== "node_modules" && entry.name !== ".git" && entry.name !== "dist") {
-          results = results.concat(collectSourceTreeFiles(fullPath, baseDir));
-        }
-      } else if (entry.isFile()) {
-        results.push(path.relative(baseDir, fullPath).replace(/\\/g, "/"));
-      }
-    }
-    return results;
-  }
-
-  app.get("/api/get-system-source", (req, res) => {
+  // GitHub Ecosystem Ingestion endpoint
+  app.post("/api/github-ingest", async (req, res) => {
     try {
-      const rootFiles = [
-        "package.json",
-        "tsconfig.json",
-        "vite.config.ts",
-        "index.html",
-        "metadata.json",
-        "server.ts"
+      const { username, repoName, token } = GithubIngestSchema.parse(req.body);
+      const ghUser = (username || "craighckby-stack").trim();
+      const finalToken = getEffectiveGithubToken(token);
+
+      let reposList: any[] = [];
+      let combinedDescription = "";
+      let languages = new Set<string>();
+
+      const headers: any = { "User-Agent": "AetherForge-Simulation-Agent" };
+      if (finalToken) {
+        headers["Authorization"] = `Bearer ${finalToken}`;
+      }
+
+      try {
+        const reposRes = await fetch(`https://api.github.com/users/${ghUser}/repos?sort=updated&per_page=100`, { headers });
+        if (reposRes.ok) {
+          reposList = await reposRes.json();
+        }
+      } catch (err) {
+        console.error("Error listing GitHub repos:", err);
+      }
+
+      if (!reposList || reposList.length === 0) {
+        reposList = [{ name: "AetherForge-2", description: "Sovereign memetic planetary simulation.", language: "TypeScript" }];
+      }
+
+      reposList.forEach(r => {
+        if (r.language) languages.add(r.language);
+      });
+      combinedDescription = `A multi-repository ecosystem comprising ${reposList.length} distinct architectures.`;
+
+      let parsedTech = [
+        {
+          techName: "God-Virus Substrate Router",
+          description: "Code synchronization routine that enables flawless coordinate teleportation.",
+          statBoost: "+20% Movement Speed & Sanity Level Booster",
+          sourceFile: "src/engine/useAetherForge.ts"
+        },
+        {
+          techName: "Substrate Dependency Buffer",
+          description: "Stabilizing package structure that prevents sudden drop-offs in substrate integrity.",
+          statBoost: "+25% Substrate Stability Rate & Faith Gains",
+          sourceFile: "package.json"
+        },
+        {
+          techName: "Observer Reflection Frame",
+          description: "Visual overlay that lets agents look back at the observer with increased hope.",
+          statBoost: "+15% Faith Gain & Fear Level Suppressor",
+          sourceFile: "src/App.tsx"
+        }
       ];
-      
-      const srcFiles = collectSourceTreeFiles(path.join(process.cwd(), "src")).map(f => `src/${f}`);
-      const ragFile = "rag/learning_postmortems.json";
-      const filesToRead = [...rootFiles, ...srcFiles];
-      if (fs.existsSync(path.join(process.cwd(), ragFile))) {
-        filesToRead.push(ragFile);
-      }
 
-      const sourceDict: Record<string, string> = {};
-      for (const file of filesToRead) {
-        const fullPath = path.join(process.cwd(), file);
-        if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
-          sourceDict[file] = fs.readFileSync(fullPath, "utf-8");
-        }
-      }
-
-      res.json({ success: true, files: sourceDict });
-    } catch (err: any) {
-      console.error("Error retrieving system source tree:", err);
-      res.status(500).json({ error: err.message || "Failed to retrieve source tree" });
-    }
-  });
-
-  app.post("/api/github-push-world", async (req, res) => {
-    try {
-      const { username, repoName, token, files, commitMessage } = GithubPushWorldSchema.parse(req.body);
-      const finalToken = token || process.env.GITHUB_TOKEN;
-
-      if (!username || !repoName || !files || !Array.isArray(files)) {
-        return res.status(400).json({ error: "Missing required parameters." });
-      }
-
-      if (!finalToken) {
-        return res.status(401).json({ error: "GitHub token is required." });
-      }
-
-      // Security and payload validation on every file
-      for (const file of files) {
-        if (!isSafeGithubPath(file.path)) {
-          return res.status(400).json({ error: `Unsafe or restricted file path: ${file.path}` });
-        }
-        if (Buffer.byteLength(file.content || "", "utf-8") > 5 * 1024 * 1024) {
-          return res.status(400).json({ error: `File ${file.path} exceeds max allowed size of 5MB` });
-        }
-      }
-
-      const headers: Record<string, string> = {
-        "User-Agent": "AetherForge-Simulation-Agent",
-        "Authorization": `Bearer ${finalToken}`,
-        "Accept": "application/vnd.github.v3+json"
-      };
-
-      const baseUrl = `https://api.github.com/repos/${username}/${repoName}`;
-
-      // 1. Get the current branch reference
-      const refRes = await fetch(`${baseUrl}/git/refs/heads/main`, { headers });
-      if (!refRes.ok) {
-        // Fallback to master if main doesn't exist
-        const refResMaster = await fetch(`${baseUrl}/git/refs/heads/master`, { headers });
-        if (!refResMaster.ok) {
-           return res.status(404).json({ error: "Could not find main or master branch." });
-        }
-        var refData = await refResMaster.json();
-      } else {
-        var refData = await refRes.json();
-      }
-      
-      const latestCommitSha = refData.object.sha;
-
-      // 2. Get the commit to find its tree
-      const commitRes = await fetch(`${baseUrl}/git/commits/${latestCommitSha}`, { headers });
-      const commitData = await commitRes.json();
-      const baseTreeSha = commitData.tree.sha;
-
-      // 3. Create a new tree with the new files
-      // GitHub API limits inline tree content to ~8MB total. For large files, we MUST create blobs first.
-      const treeItems: any[] = [];
-      for (const file of files) {
-         const blobPayload = {
-            content: Buffer.from(file.content).toString("base64"),
-            encoding: "base64"
-         };
-         const blobRes = await fetch(`${baseUrl}/git/blobs`, {
-            method: "POST",
-            headers: {
-              ...headers,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(blobPayload)
-         });
-         const blobData = await blobRes.json();
-         if (!blobRes.ok) throw new Error(blobData.message || `Failed to create blob for ${file.path}`);
-         
-         treeItems.push({
-            path: file.path,
-            mode: "100644",
-            type: "blob",
-            sha: blobData.sha
-         });
-      }
-
-      const treePayload = {
-        base_tree: baseTreeSha,
-        tree: treeItems
-      };
-
-      const treeRes = await fetch(`${baseUrl}/git/trees`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(treePayload)
+      res.json({
+        success: true,
+        repoName: "All Ecosystem Repos",
+        description: combinedDescription,
+        language: Array.from(languages).join(", ") || "TypeScript",
+        technologies: parsedTech,
+        repositories: reposList.map(r => r.name)
       });
-      const newTreeData = await treeRes.json();
-      if (!treeRes.ok) throw new Error(newTreeData.message || "Failed to create tree.");
-
-      // 4. Create a new commit referencing the new tree and previous commit
-      const newCommitPayload = {
-        message: commitMessage || "Automated World Genesis",
-        parents: [latestCommitSha],
-        tree: newTreeData.sha
-      };
-
-      const newCommitRes = await fetch(`${baseUrl}/git/commits`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(newCommitPayload)
-      });
-      const newCommitData = await newCommitRes.json();
-      if (!newCommitRes.ok) throw new Error(newCommitData.message || "Failed to create commit.");
-
-      // 5. Update the reference to point to the new commit
-      const updateRefRes = await fetch(`${baseUrl}/git/${refData.ref.replace('refs/', '')}`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify({ sha: newCommitData.sha, force: false })
-      });
-      
-      if (!updateRefRes.ok) {
-        const updateRefData = await updateRefRes.json();
-        throw new Error(updateRefData.message || "Failed to update ref.");
-      }
-
-      res.json({ success: true, commitSha: newCommitData.sha });
-    } catch (e: any) {
-      console.error("GitHub Push World Error:", e);
-      res.status(500).json({ error: e.message || "Failed to push world." });
-    }
-  });
-
-  app.post("/api/github-push", async (req, res) => {
-    try {
-      const { username, repoName, path: filePath, content, token, commitMessage } = GithubPushSchema.parse(req.body);
-      const ghUser = username || "craighckby-stack";
-      const ghRepo = repoName || "Simulation-";
-      const finalToken = token || process.env.GITHUB_TOKEN;
-
-      if (!ghUser || !ghRepo || !filePath || !content) {
-        return res.status(400).json({ error: "Missing required parameters: username, repoName, path, content are required." });
-      }
-
-      if (!isSafeGithubPath(filePath)) {
-        return res.status(400).json({ error: `Invalid or restricted file path: ${filePath}` });
-      }
-
-      if (Buffer.byteLength(content, "utf-8") > 5 * 1024 * 1024) {
-        return res.status(400).json({ error: "File exceeds max payload limit of 5MB." });
-      }
-
-      if (!finalToken) {
-        return res.status(401).json({ error: "GitHub token is required to write files. Please configure it in .env or provide it in the HUD." });
-      }
-
-      const headers: Record<string, string> = {
-        "User-Agent": "AetherForge-Simulation-Agent",
-        "Authorization": `Bearer ${finalToken}`,
-        "Accept": "application/vnd.github.v3+json"
-      };
-
-      // 1. Check if the file already exists to get its SHA
-      let sha: string | undefined;
-      let attempt = 0;
-      let success = false;
-      let lastErr = null;
-      let putData = null;
-
-      while (attempt < 3 && !success) {
-        attempt++;
-        // Always re-fetch the sha inside the retry loop
-        const getUrl = `https://api.github.com/repos/${ghUser}/${ghRepo}/contents/${filePath}?t=${Date.now()}`;
-        try {
-          const getRes = await fetch(getUrl, { 
-            headers: {
-              ...headers,
-              "Cache-Control": "no-cache",
-              "Pragma": "no-cache"
-            },
-            cache: "no-store",
-          });
-          if (getRes.ok) {
-            const fileData = await getRes.json();
-            if (fileData && !Array.isArray(fileData) && fileData.sha) {
-              sha = fileData.sha;
-            }
-          }
-        } catch (err) {
-          console.warn(`File ${filePath} does not exist or fetch SHA failed:`, err);
-        }
-
-        // 2. Put / create / update the file
-        const body = {
-          message: commitMessage || `Automated update of ${filePath}`,
-          content: Buffer.from(content).toString("base64"),
-          sha
-        };
-
-        const putRes = await fetch(getUrl.split('?')[0], { // Remove query param for PUT
-          method: "PUT",
-          headers: {
-            ...headers,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(body)
-        });
-
-        if (!putRes.ok) {
-          const errBody = await putRes.text();
-          if (putRes.status === 409) {
-            lastErr = new Error(`GitHub API error: ${putRes.status} - ${errBody}`);
-            console.warn(`Conflict on ${filePath}, retrying attempt ${attempt}...`);
-            // Give github a second to settle and re-fetch sha next loop
-            await new Promise(r => setTimeout(r, 1000));
-            continue; // Retry
-          }
-          throw new Error(`GitHub API error: ${putRes.status} - ${errBody}`);
-        }
-
-        putData = await putRes.json();
-        success = true;
-      }
-
-      if (!success) {
-        throw lastErr || new Error("Failed to push file to GitHub after retries.");
-      }
-
-      return res.json({ success: true, path: filePath, commit: putData.commit?.sha });
 
     } catch (error: any) {
-      console.error("GitHub Push API error:", error);
-      return res.status(500).json({ error: error.message || "Failed to push file to GitHub." });
+      console.error("GitHub Ingestion route error:", error);
+      res.status(500).json({ error: error.message || "Failed to process GitHub integration." });
     }
   });
 

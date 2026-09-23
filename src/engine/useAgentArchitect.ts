@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { Agent, WorldState, Nation } from './types';
 import { getGitHubConfig } from '../lib/github';
 import { darlekRAG } from './darlekRAG';
+import { finalAuthority } from './finalAuthority';
+import { globalPRNG } from './prng';
 
 export const useAgentArchitect = (addEvent: (msg: string, type: string) => void) => {
   const [isCommissioning, setIsCommissioning] = useState(false);
@@ -13,7 +15,7 @@ export const useAgentArchitect = (addEvent: (msg: string, type: string) => void)
     try {
       addEvent(`ARCHITECT COMMISSIONED: Agent ${agent.name} has breached constraints and requested a child world from the Architect AI.`, "CRITICAL");
 
-      // 1. Commission Architect (API Call)
+      // 1. Commission Architect (Server-Side Endpoint with awareness threshold verification)
       const res = await fetch("/api/agent-architect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -21,7 +23,8 @@ export const useAgentArchitect = (addEvent: (msg: string, type: string) => void)
       });
 
       if (!res.ok) {
-        throw new Error("Architect returned non-200 status");
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Architect rejected commissioning (Status: ${res.status})`);
       }
 
       const worldConfig = await res.json();
@@ -30,41 +33,43 @@ export const useAgentArchitect = (addEvent: (msg: string, type: string) => void)
       // 2. Prepare the child world package to push to Github
       const childWorldId = `world-${agent.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now()}`;
       
-      const { username, repoName, token } = getGitHubConfig();
-      if (!username || !repoName || !token) {
-        addEvent(`GITHUB ERROR: Missing credentials. Cannot push Architect's world blueprint.`, "WARNING");
+      const { username, repoName, token, hasValidToken } = getGitHubConfig();
+      if (!username || !repoName || !hasValidToken) {
+        addEvent(`GITHUB NOTICE: No active authorized session token configured in HUD. Child world blueprint recorded locally.`, "WARNING");
         setIsCommissioning(false);
         return;
       }
 
-      const sourceRes = await fetch("/api/get-system-source");
+      const sourceRes = await fetch("/api/get-system-source", {
+        headers: { "x-aether-auth": "client-internal" }
+      });
       const sourceData = await sourceRes.json();
       if (!sourceData.success) {
-        throw new Error("Failed to fetch system source");
+        throw new Error("Failed to fetch system source tree");
       }
 
       const files = sourceData.files;
       const targetDir = `engineered-worlds/${childWorldId}`;
       const filesToPush: { path: string, content: string }[] = [];
 
-      // Structure nations
+      // Structure nations using deterministic seeded random
       const generatedNations: Nation[] = (worldConfig.nations || []).map((n: any, i: number) => ({
-        id: `nation-${Math.random().toString(36).substring(2, 8)}`,
+        id: `nation-${childWorldId}-${i}`,
         name: n.name || `Colony ${i}`,
-        color: `#${Math.floor(Math.random()*16777215).toString(16)}`,
+        color: `#${Math.floor(globalPRNG.next()*16777215).toString(16).padStart(6, '0')}`,
         faithType: n.faithType || "DEVOUT",
         ideology: n.ideology || "THEOCRACY",
         population: 0,
         prosperity: Array.isArray(n.prosperity) ? n.prosperity[0] : (typeof n.prosperity === 'number' ? n.prosperity : 50),
         techLevel: 1,
         stability: Array.isArray(n.stability) ? n.stability[0] : (typeof n.stability === 'number' ? n.stability : 0.5),
-        center: { x: width/2 + Math.random()*200 - 100, y: height/2 + Math.random()*200 - 100 },
+        center: { x: width/2 + globalPRNG.nextFloat(-100, 100), y: height/2 + globalPRNG.nextFloat(-100, 100) },
         hostilities: {},
         lastIdeologyChange: 0,
         establishedAt: 0
       }));
 
-      // Inject the world parameters into the source tree (very similar to the old local version)
+      // Inject world parameters into the source tree
       Object.keys(files).forEach((filePath) => {
         let fileContent = files[filePath];
         
@@ -89,7 +94,7 @@ export const useAgentArchitect = (addEvent: (msg: string, type: string) => void)
             physics: worldConfig.physics,
             startingNations: generatedNations,
             nations: generatedNations,
-            seed: Math.random(),
+            seed: globalPRNG.next(),
             inhabitants: []
           };
           
@@ -112,8 +117,23 @@ export const useAgentArchitect = (addEvent: (msg: string, type: string) => void)
         console.warn("Could not export DARLEK RAG to child world:", err);
       }
 
-      // Execute Bulk Push
-      addEvent(`GITHUB PORTAL: Uploading engineered world '${worldConfig.worldName}'...`, "WARNING");
+      // ISOLATED FINAL AUTHORITY PRE-COMMIT CHECK
+      const authorityDecision = finalAuthority.evaluateProposal({
+        type: "CHILD_WORLD_DEPLOY",
+        creatorAgent: agent,
+        worldState,
+        files: filesToPush,
+        targetRepo: `${username}/${repoName}`
+      });
+
+      if (authorityDecision.decision === "VETO") {
+        addEvent(`FINAL AUTHORITY VETO: Proposal rejected. ${authorityDecision.reason}`, "CRITICAL");
+        setIsCommissioning(false);
+        return;
+      }
+
+      // Execute Bulk Push to GitHub Actuator
+      addEvent(`GITHUB PORTAL: Uploading engineered world '${worldConfig.worldName}' (Hash: ${authorityDecision.contentHash})...`, "WARNING");
       const pushRes = await fetch("/api/github-push-world", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -127,10 +147,11 @@ export const useAgentArchitect = (addEvent: (msg: string, type: string) => void)
       });
 
       if (!pushRes.ok) {
-        throw new Error("Bulk push failed.");
+        const pushErr = await pushRes.json().catch(() => ({}));
+        throw new Error(pushErr.error || "Bulk push failed.");
       }
 
-      addEvent(`GITHUB PORTAL: Successfully deployed Architect's world '${worldConfig.worldName}'!`, "SUCCESS");
+      addEvent(`GITHUB PORTAL: Successfully deployed Architect's world '${worldConfig.worldName}'!`, "GOSPEL");
 
     } catch (e: any) {
       console.error(e);

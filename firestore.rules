@@ -1,46 +1,104 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
+    // Default deny all access
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Helper functions
+    // Authentication Helper
     function isSignedIn() {
       return request.auth != null;
     }
 
+    // ID Format Validation
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function incoming() {
       return request.resource.data;
     }
 
-    // World Validation
-    function isValidWorld(data) {
-      return data.keys().hasAll(['clock', 'complexity', 'integrity', 'population', 'epoch']) &&
-             data.clock is number &&
-             data.complexity is number &&
-             data.integrity is number &&
-             data.population is int &&
-             data.epoch is string;
+    function existing() {
+      return resource.data;
     }
 
+    // Invariant: Allowed Epoch Types
+    function isValidEpoch(epoch) {
+      return epoch in [
+        'PRIMAL', 'AWAKENING', 'ENLIGHTENMENT', 'TRANSCENDENCE', 'SINGULARITY',
+        'AGRARIAN', 'CLASSICAL', 'INDUSTRIAL', 'INFORMATION', 'POST_HUMAN'
+      ];
+    }
+
+    // Invariant: Allowed Archetype Enums
+    function isValidArchetype(arch) {
+      return arch in [
+        'PRIEST', 'SCHOLAR', 'WARRIOR', 'ARTISAN', 'PROPHET',
+        'ZEALOT', 'SCIENTIST', 'HERETIC', 'ANGEL', 'DEMON',
+        'MESSIAH', 'TYRANT', 'GLITCH', 'SAGE', 'ARTIST'
+      ];
+    }
+
+    // Invariant: Allowed Event Types
+    function isValidEventType(t) {
+      return t in [
+        'INFO', 'WARNING', 'CRITICAL', 'ENLIGHTENMENT', 'MIRACLE', 'DIVINE_WRATH', 'GOSPEL'
+      ];
+    }
+
+    // World Invariant Validation (Dirty Dozen Hardening)
+    function isValidWorld(data) {
+      return data.keys().hasAll(['clock', 'complexity', 'integrity', 'population', 'epoch']) &&
+             data.clock is number && data.clock >= 0 &&
+             data.complexity is number && data.complexity >= 0 &&
+             data.integrity is number && data.integrity >= 0 && data.integrity <= 100 &&
+             data.population is int && data.population >= 0 &&
+             isValidEpoch(data.epoch) &&
+             (!('faithPoints' in data) || (data.faithPoints is number && data.faithPoints >= 0)) &&
+             (!('sinAccumulation' in data) || (data.sinAccumulation is number && data.sinAccumulation >= 0)) &&
+             (!('judgmentMeter' in data) || (data.judgmentMeter is number && data.judgmentMeter >= 0 && data.judgmentMeter <= 100));
+    }
+
+    // Agent Invariant Validation
+    function isValidAgent(data) {
+      return data.keys().hasAll(['id', 'name', 'archetype', 'x', 'y']) &&
+             data.id is string && isValidId(data.id) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 64 &&
+             isValidArchetype(data.archetype) &&
+             data.x is number && data.y is number &&
+             (!('order' in data) || (data.order is number && data.order >= 0.0 && data.order <= 1.0)) &&
+             (!('rationalism' in data) || (data.rationalism is number && data.rationalism >= 0.0 && data.rationalism <= 1.0)) &&
+             (!('sanity' in data) || (data.sanity is number && data.sanity >= 0.0 && data.sanity <= 1.0)) &&
+             (!('awareness' in data) || (data.awareness is number && data.awareness >= 0.0 && data.awareness <= 1.0)) &&
+             (!('energy' in data) || (data.energy is number && data.energy >= 0.0 && data.energy <= 100.0));
+    }
+
+    // Event Invariant Validation
+    function isValidEvent(data) {
+      return data.keys().hasAll(['timestamp', 'message', 'type']) &&
+             data.timestamp is number &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 2048 &&
+             isValidEventType(data.type);
+    }
+
+    // Database Routes
     match /worlds/{worldId} {
       allow read: if true;
-      allow create, update: if isSignedIn() && isValidWorld(incoming());
-      
+      allow create, update: if isSignedIn() && isValidId(worldId) && isValidWorld(incoming());
+
       match /agents/{agentId} {
         allow read: if true;
-        allow write: if isSignedIn();
+        allow create: if isSignedIn() && isValidId(agentId) && isValidAgent(incoming());
+        allow update: if isSignedIn() && isValidId(agentId) && isValidAgent(incoming()) && incoming().id == existing().id;
+        allow delete: if isSignedIn();
       }
 
       match /events/{eventId} {
         allow read: if true;
-        allow create: if isSignedIn();
+        allow create: if isSignedIn() && isValidId(eventId) && isValidEvent(incoming());
+        allow update, delete: if false; // Events are append-only audit trail
       }
     }
   }
