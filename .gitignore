@@ -120,3 +120,41 @@ desktop.ini
 *.tmp
 *.orig
 *.rej
+
+# Defensive Additions: Local Databases & SQLite
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite3-journal
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Defensive Additions: Local Configurations & Cloudflare
+*.local.json
+local.settings.json
+config.local.json
+wrangler.toml.local
+.wrangler/
+.cloudflare/
+
+# Defensive Additions: AI, Agent & IDE Metadata
+.claude/
+.continue/
+.cursor/extensions/
+.copilot/
+
+# Defensive Additions: Mobile & Cross-Platform Artifacts
+.expo/
+.expo-shared/
+.gradle/
+android/app/build/
+ios/Pods/
+ios/build/
+
+# Defensive Additions: System & Patch Outputs
+*.patch
+*.diff
+$RECYCLE.BIN/
+Icon?
