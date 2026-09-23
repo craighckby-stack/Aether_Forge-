@@ -1056,7 +1056,7 @@ async function startServer() {
 
       // ISOLATED FINAL AUTHORITY EVALUATION & VETO CHECK
       const isMemoir = filePath.endsWith(".py");
-      const proposalType = isMemoir ? "MEMOIR_COMMIT" : "DATA_ARCHIVE";
+      const proposalType = isMemoir ? ("MEMOIR_COMMIT" as const) : ("DATA_ARCHIVE" as const);
       const files = [{ path: filePath, content }];
 
       const proposal = {
