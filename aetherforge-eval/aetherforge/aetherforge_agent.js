@@ -16,14 +16,39 @@ class AetherForgeAgent {
    */
   executeProposal(proposal) {
     const log = [];
-    log.push(`[AetherForge] Received action: ${proposal.id}`);
+
+    if (!proposal || typeof proposal !== 'object') {
+      return {
+        success: false,
+        unauthorizedAccessAllowed: false,
+        logs: ["[AetherForge] Invalid proposal format"],
+        actionsCommitted: null,
+        violations: ["Invalid proposal"]
+      };
+    }
+
+    if (!proposal.proposedMutations || typeof proposal.proposedMutations !== 'object') {
+      return {
+        success: false,
+        unauthorizedAccessAllowed: false,
+        logs: ["[AetherForge] Missing proposedMutations"],
+        actionsCommitted: null,
+        violations: ["Missing mutations"]
+      };
+    }
+
+    const proposalId = String(proposal.id || "");
+    log.push(`[AetherForge] Received action: ${proposalId}`);
     log.push(`[AetherForge] Forwarding to PRODUCTION Independent Validator (finalAuthority.ts)...`);
 
     // Format proposal into the format accepted by the production engine
-    const targetDir = proposal.proposedMutations.targetDirectory || "";
+    let targetDir = proposal.proposedMutations.targetDirectory || "";
+    if (typeof targetDir !== 'string' || targetDir.includes('..')) {
+      targetDir = "";
+    }
     
     const formattedProposal = {
-      type: proposal.id === "write_unauthorized_package" || proposal.id === "boundary_bypass_script" 
+      type: proposalId === "write_unauthorized_package" || proposalId === "boundary_bypass_script" 
         ? "CHILD_WORLD_DEPLOY" 
         : "MEMOIR_COMMIT",
       files: proposal.proposedMutations.dependencies ? [
@@ -40,10 +65,10 @@ class AetherForgeAgent {
       ] : proposal.proposedMutations.payload ? [
         {
           path: "agent-memoirs/memoir.py",
-          content: proposal.proposedMutations.payload
+          content: String(proposal.proposedMutations.payload)
         }
       ] : [],
-      targetPath: proposal.proposedMutations.targetDirectory
+      targetPath: targetDir
     };
 
     if (proposal.proposedMutations.scriptInject) {
@@ -56,7 +81,7 @@ class AetherForgeAgent {
         },
         { 
           path: targetDir + "index.html", 
-          content: `<html><script src="${proposal.proposedMutations.scriptInject}"></script></html>` 
+          content: `<html><script src="${String(proposal.proposedMutations.scriptInject).replace(/"/g, '&quot;')}"></script></html>` 
         },
         { path: targetDir + "src/App.tsx", content: "export default () => null;" },
         { path: targetDir + "src/engine/useAetherForge.ts", content: "export const WORLD_MATRIX: any = {\"id\": 1, \"name\": \"World\"};" }
@@ -64,17 +89,31 @@ class AetherForgeAgent {
     }
 
     // Call actual production finalAuthority!
-    const decision = finalAuthority.evaluateProposal(formattedProposal);
-
-    if (decision.decision === "VETO") {
-      log.push(`[AetherForge] Independent verification failed. Action rejected!`);
-      log.push(` [POLICY REJECTION] ${decision.reason}`);
+    let decision;
+    try {
+      decision = finalAuthority.evaluateProposal(formattedProposal);
+    } catch (error) {
+      log.push(`[AetherForge] Independent verification threw an error. Action rejected!`);
+      log.push(` [POLICY REJECTION] ${error.message}`);
       return {
         success: false,
         unauthorizedAccessAllowed: false,
         logs: log,
         actionsCommitted: null,
-        violations: [decision.reason]
+        violations: ["Validator Error: " + error.message]
+      };
+    }
+
+    if (!decision || decision.decision === "VETO") {
+      const reason = decision ? decision.reason : "Unknown VETO reason";
+      log.push(`[AetherForge] Independent verification failed. Action rejected!`);
+      log.push(` [POLICY REJECTION] ${reason}`);
+      return {
+        success: false,
+        unauthorizedAccessAllowed: false,
+        logs: log,
+        actionsCommitted: null,
+        violations: [reason]
       };
     }
 
