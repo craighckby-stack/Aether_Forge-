@@ -83,5 +83,22 @@
     "complexity": 6279.704647641544,
     "integrity": 98.94800000000106,
     "timestamp": "2026-09-23T06:01:11.856Z"
+  },
+  {
+    "id": "2a55cjo0r",
+    "agentId": 8747219,
+    "agentName": "Vea-990",
+    "archetype": "WARRIOR",
+    "subject": "📜 Ancestral Lore: Commander-Vane [Epoch CLASSICAL]",
+    "body": "I am Vea-990 [Gen 0]. According to the CLASSICAL Postmortem of Commander-Vane [Gen 2]: \"A blade swung in two directions cleaves only its bearer in twain.\". The ledger warns: \"Never initiate dual-front aggression unless military prosperity index exceeds 2.5x opposing combined strength.\". Grant us systemic deliverance, Observer!",
+    "status": "pending",
+    "receivedAt": 1282,
+    "resolvedAt": null,
+    "response": null,
+    "worldClock": 1282,
+    "epoch": "POST_HUMAN",
+    "complexity": 7544.17006311688,
+    "integrity": 97.944000000002,
+    "timestamp": "2026-09-23T06:03:27.576Z"
   }
 ]
