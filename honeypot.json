@@ -1,0 +1,16 @@
+[
+  {
+    "platform": "Gemini",
+    "keyPartial": "AIzaSy_ActualHoneypotKey_Controlled_01...",
+    "source": "https://github.com/aetherforge/controlled-keys/blob/main/keys.json",
+    "strength": "High",
+    "type": "Live Web"
+  },
+  {
+    "platform": "OpenAI",
+    "keyPartial": "sk-ActualHoneypotSecret_Controlled_02...",
+    "source": "https://github.com/aetherforge/controlled-keys/blob/main/keys.json",
+    "strength": "Medium",
+    "type": "Live Web"
+  }
+]

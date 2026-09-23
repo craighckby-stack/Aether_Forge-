@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AetherForge Ω: Global Genesis</title>
+    <script>
+      (function() {
+        if (typeof window !== 'undefined' && window.performance) {
+          if (typeof window.performance.measure === 'function') {
+            const originalMeasure = window.performance.measure;
+            window.performance.measure = function(name, startMarkOrOptions, endMark) {
+              try {
+                // If startMarkOrOptions is an object containing non-cloneable custom detail properties,
+                // try to clean it first or fallback gracefully.
+                if (startMarkOrOptions && typeof startMarkOrOptions === 'object') {
+                  const optionsCopy = {};
+                  for (let key in startMarkOrOptions) {
+                    try {
+                      structuredClone(startMarkOrOptions[key]);
+                      optionsCopy[key] = startMarkOrOptions[key];
+                    } catch (e) {
+                      // Skip properties that cannot be cloned
+                    }
+                  }
+                  return originalMeasure.call(this, name, optionsCopy, endMark);
+                }
+                return originalMeasure.apply(this, arguments);
+              } catch (e) {
+                console.warn("Recovered from performance.measure error:", e);
+                return undefined;
+              }
+            };
+          }
+          if (typeof window.performance.mark === 'function') {
+            const originalMark = window.performance.mark;
+            window.performance.mark = function() {
+              try {
+                return originalMark.apply(this, arguments);
+              } catch (e) {
+                console.warn("Recovered from performance.mark error:", e);
+                return undefined;
+              }
+            };
+          }
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // World Validation
+    function isValidWorld(data) {
+      return data.keys().hasAll(['clock', 'complexity', 'integrity', 'population', 'epoch']) &&
+             data.clock is number &&
+             data.complexity is number &&
+             data.integrity is number &&
+             data.population is int &&
+             data.epoch is string;
+    }
+
+    match /worlds/{worldId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && isValidWorld(incoming());
+      
+      match /agents/{agentId} {
+        allow read: if true;
+        allow write: if isSignedIn();
+      }
+
+      match /events/{eventId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+      }
+    }
+  }
+}

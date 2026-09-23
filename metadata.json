@@ -1,0 +1,6 @@
+{
+  "name": "AetherForge Ω: Global Genesis",
+  "description": "A self-replicating memetic planetary simulation exploration where agents evolve into independent God-Observers who dream, design, and birth completely original child worlds with zero limits.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
