@@ -66,7 +66,7 @@ class EMGCognitiveGateEngine {
       return {
         allowLLM: false,
         admitted: false,
-        reason: "EMG Circuit Breaker active: Rate threshold reached (Self-Stopping Point). Switched to 0ms DARLEK RAG.",
+        reason: "EMG Circuit Breaker active: Rate threshold reached (Self-Stopping Point). Switched to Sub-millisecond local DARLEK RAG.",
         source: "CIRCUIT_BREAKER_FALLBACK",
         synthesizedResponse: fallbackCitation ? fallbackCitation.citation : "The substrate hums quietly with ancestral wisdom.",
         postmortemReference: fallbackCitation ? fallbackCitation.sourcePostmortem : null,

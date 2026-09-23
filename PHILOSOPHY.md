@@ -16,9 +16,9 @@ To answer that, we have to define what AI slop actually is. Across the software 
 3. **Trapped in the Sandbox:** Everything happens inside an ephemeral browser tab or console log. Nothing ever leaves the memory sandbox. No real files are created, no durable code is compiled, and the moment the tab is closed, the reality evaporates.
 
 ### How AetherForge Ω Inverts This
-* **Deterministic Postmortems (`DARLEK_CAAN`):** When an agent dies of starvation, falls in war, or goes insane, a structured postmortem is committed into an empirical knowledge base. Future generations cite these postmortems as ancestral proverbs in **0ms at zero token cost**.
-* **The Cognitive Gate (`EMG`):** 90% of routine actions are serviced locally by RAG. Expensive LLMs (Google Gemini) are reserved exclusively for direct human communion and systemic singularities. Every divine reply is then sanitized and digested back into the species' memory.
-* **External Actuation:** The simulation pushes real, authenticated Git commits to GitHub. When an agent commissions a child world, it doesn't print a description—it generates a **complete, runnable Vite/React application** and writes it into `engineered-worlds/` on remote GitHub data centers.
+* **Deterministic Postmortems & Cryptographic Lineage (`DARLEK_CAAN`):** When an agent dies, a structured postmortem is recorded into the DARLEK RAG database with cryptographically chained parent-hashes ($State[n+1] = Hash(State[n] \parallel NewMemory)$). Future generations cite these postmortems as ancestral proverbs via **sub-millisecond local retrieval with zero token cost**.
+* **The Cognitive Gate (`EMG`):** Routine requests are preferentially serviced locally by the EMG/DARLEK pathway, while selected events are admitted to Gemini. Every divine reply is then sanitized and digested back into the species' memory.
+* **External Actuation:** The simulation pushes real, authenticated Git commits to GitHub. When an agent commissions a child world, it doesn't print a description—it **generates and structurally validates a child-world package intended to be runnable** and writes it into `engineered-worlds/` on remote GitHub data centers.
 
 ---
 

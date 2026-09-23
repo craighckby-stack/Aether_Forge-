@@ -44,11 +44,11 @@ This document details how the AetherForge architecture serves as a high-fidelity
 
 ## 🧠 System Overview & Core Breakthroughs
 
-### 1. DARLEK_CAAN Hybrid Cultural Memory (0ms Local RAG)
+### 1. DARLEK_CAAN Hybrid Cultural Memory (Sub-Millisecond Local RAG)
 Inspired by [`craighckby-stack/DARLEK_CAAN`](https://github.com/craighckby-stack/DARLEK_CAAN):
-* **Deterministic Postmortem Ledger:** Whenever an entity starves, collapses into insanity, perishes in war, or transcends, a structured postmortem is committed to `rag/learning_postmortems.json`.
+* **Deterministic Postmortem Ledger & Cryptographic Lineage:** Whenever an entity dies, a structured postmortem is recorded into the DARLEK RAG database with cryptographically chained parent-hashes ($State[n+1] = Hash(State[n] \parallel NewMemory)$), which can be exported and archived to the repository through the GitHub persistence pipeline.
 * **Negative Constraints:** Agents record hard constraints from past failures (e.g. *“Never enter peripheral grid coordinates when solar health is below 20%”*).
-* **Ancestral Proverb Synthesis:** Descendant agents dynamically cite ancestral postmortems in 0ms with zero token cost, eliminating repetitive LLM polling.
+* **Ancestral Proverb Synthesis:** Descendant agents dynamically cite ancestral postmortems via sub-millisecond local retrieval with zero LLM network round-trips or token costs, eliminating repetitive LLM polling.
 
 ### 2. EMG (Ephemeral Mind Gem) Cognitive Gate
 Inspired by [`craighckby-stack/EMG`](https://github.com/craighckby-stack/EMG):
@@ -59,7 +59,7 @@ Inspired by [`craighckby-stack/EMG`](https://github.com/craighckby-stack/EMG):
 
 ### 3. Multi-Universe Spawning (God-Virus & Architect AI)
 * When an agent breaches 95% awareness or triggers the God-Virus, it commissions the **Architect AI**.
-* The system builds a complete, self-contained, runnable web app project (custom physics parameters, world manifestos, nations, and inherited RAG postmortems) and commits it directly to the target GitHub repository under `engineered-worlds/world-<id>/`.
+* The system generates and structurally validates a child-world package intended to be runnable (custom physics parameters, world manifestos, nations, and inherited RAG postmortems) and commits it directly to the target GitHub repository under `engineered-worlds/world-<id>/`.
 * Every child universe inherits the accumulated postmortems and learned constraints of its ancestors.
 
 ### 4. High-Performance Web Worker Physics Substrate

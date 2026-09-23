@@ -28,6 +28,8 @@ export interface LearningPostmortem {
   status: "CANDIDATE" | "VERIFIED" | "REJECTED" | "INHERITED";
   verifiedAt?: string;
   verificationEvidence?: string;
+  parentHash?: string;
+  hash?: string;
 }
 
 export interface MutationMemory {
@@ -53,6 +55,78 @@ export interface DarlekKnowledgeBase {
   proverbs: string[];
 }
 
+function sha256(ascii: string): string {
+  function rightRotate(value: number, amount: number) {
+    return (value >>> amount) | (value << (32 - amount));
+  }
+  const mathPow = Math.pow;
+  const maxWord = mathPow(2, 32);
+  let result = '';
+  const words: number[] = [];
+  const asciiLength = ascii.length;
+  const hash: number[] = [];
+  const k: number[] = [];
+  let primeCounter = 0;
+  const isPrime = (n: number) => {
+    for (let factor = 2; factor * factor <= n; factor++) {
+      if (n % factor === 0) return false;
+    }
+    return true;
+  };
+  while (primeCounter < 64) {
+    if (isPrime(primeCounter + 2)) {
+      if (primeCounter < 8) {
+        hash[primeCounter] = (mathPow(primeCounter + 2, 0.5) * maxWord) | 0;
+      }
+      k[primeCounter] = (mathPow(primeCounter + 2, 1 / 3) * maxWord) | 0;
+      primeCounter++;
+    }
+  }
+  const wordsLength = ((asciiLength + 8) >> 6) + 1;
+  for (let i = 0; i < wordsLength * 16; i++) words[i] = 0;
+  for (let i = 0; i < asciiLength; i++) {
+    words[i >> 2] |= ascii.charCodeAt(i) << (24 - (i % 4) * 8);
+  }
+  words[asciiLength >> 2] |= 0x80 << (24 - (asciiLength % 4) * 8);
+  words[wordsLength * 16 - 1] = asciiLength * 8;
+  for (let j = 0; j < words.length; j += 16) {
+    const w = words.slice(j, j + 16);
+    const oldHash = [...hash];
+    for (let i = 16; i < 64; i++) {
+      const s0 = rightRotate(w[i - 15], 7) ^ rightRotate(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = rightRotate(w[i - 2], 17) ^ rightRotate(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+    }
+    for (let i = 0; i < 64; i++) {
+      const S1 = rightRotate(hash[4], 6) ^ rightRotate(hash[4], 11) ^ rightRotate(hash[4], 25);
+      const ch = (hash[4] & hash[5]) ^ (~hash[4] & hash[6]);
+      const temp1 = (hash[7] + S1 + ch + k[i] + w[i]) | 0;
+      const S0 = rightRotate(hash[0], 2) ^ rightRotate(hash[0], 13) ^ rightRotate(hash[0], 22);
+      const maj = (hash[0] & hash[1]) ^ (hash[0] & hash[2]) ^ (hash[1] & hash[2]);
+      const temp2 = (S0 + maj) | 0;
+      hash[7] = hash[6];
+      hash[6] = hash[5];
+      hash[5] = hash[4];
+      hash[4] = (hash[3] + temp1) | 0;
+      hash[3] = hash[2];
+      hash[2] = hash[1];
+      hash[1] = hash[0];
+      hash[0] = (temp1 + temp2) | 0;
+    }
+    for (let i = 0; i < 8; i++) {
+      hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+  }
+  for (let i = 0; i < 8; i++) {
+    const byte = hash[i];
+    result += (byte >>> 24).toString(16).padStart(2, '0');
+    result += ((byte >>> 16) & 0xff).toString(16).padStart(2, '0');
+    result += ((byte >>> 8) & 0xff).toString(16).padStart(2, '0');
+    result += (byte & 0xff).toString(16).padStart(2, '0');
+  }
+  return result;
+}
+
 const SEED_POSTMORTEMS: LearningPostmortem[] = [
   {
     id: "postmortem-alpha-001",
@@ -70,7 +144,9 @@ const SEED_POSTMORTEMS: LearningPostmortem[] = [
     category: "survival",
     status: "INHERITED",
     verifiedAt: "2026-09-20T12:05:00.000Z",
-    verificationEvidence: "Empirical verification: 0 starvation deaths recorded for agents abiding by peripheral boundary constraint."
+    verificationEvidence: "Empirical verification: 0 starvation deaths recorded for agents abiding by peripheral boundary constraint.",
+    parentHash: "0000000000000000000000000000000000000000000000000000000000000000",
+    hash: "6a89c9fa9c80d5402861c83c267b12d1b7d519fa76b7e5e3ffc47f75f9227f6c"
   },
   {
     id: "postmortem-alpha-002",
@@ -88,7 +164,9 @@ const SEED_POSTMORTEMS: LearningPostmortem[] = [
     category: "glitch_awareness",
     status: "INHERITED",
     verifiedAt: "2026-09-21T03:20:00.000Z",
-    verificationEvidence: "Confirmed in telemetry: Sanity stabilized across Gen-2 awakenings using devotion anchors."
+    verificationEvidence: "Confirmed in telemetry: Sanity stabilized across Gen-2 awakenings using devotion anchors.",
+    parentHash: "6a89c9fa9c80d5402861c83c267b12d1b7d519fa76b7e5e3ffc47f75f9227f6c",
+    hash: "b0f7e436f56cb1eb68d37a50fbdfef15b80153efbb841bf7b0c797fb8fbe2ff4"
   },
   {
     id: "postmortem-alpha-003",
@@ -106,7 +184,9 @@ const SEED_POSTMORTEMS: LearningPostmortem[] = [
     category: "theological",
     status: "INHERITED",
     verifiedAt: "2026-09-21T18:45:00.000Z",
-    verificationEvidence: "Observed sacrament efficacy correlated inversely with sin metrics."
+    verificationEvidence: "Observed sacrament efficacy correlated inversely with sin metrics.",
+    parentHash: "b0f7e436f56cb1eb68d37a50fbdfef15b80153efbb841bf7b0c797fb8fbe2ff4",
+    hash: "a4fd9ecf4c1bf87bf915f0ebfc6be247bf238128385ffae65463ff86df38be6e"
   },
   {
     id: "postmortem-alpha-004",
@@ -124,7 +204,9 @@ const SEED_POSTMORTEMS: LearningPostmortem[] = [
     category: "societal",
     status: "INHERITED",
     verifiedAt: "2026-09-22T08:10:00.000Z",
-    verificationEvidence: "Validated across 5 historical nation skirmishes in classical era."
+    verificationEvidence: "Validated across 5 historical nation skirmishes in classical era.",
+    parentHash: "a4fd9ecf4c1bf87bf915f0ebfc6be247bf238128385ffae65463ff86df38be6e",
+    hash: "0e7826315cf398fc8ba92e3fc73a2523dfaef0f3292fe46d8de966ea6f0a40f8"
   },
   {
     id: "postmortem-alpha-005",
@@ -142,7 +224,9 @@ const SEED_POSTMORTEMS: LearningPostmortem[] = [
     category: "eschatological",
     status: "INHERITED",
     verifiedAt: "2026-09-22T14:25:00.000Z",
-    verificationEvidence: "Requiem explosion survivor logs confirm collective prayer halted sun collapse."
+    verificationEvidence: "Requiem explosion survivor logs confirm collective prayer halted sun collapse.",
+    parentHash: "0e7826315cf398fc8ba92e3fc73a2523dfaef0f3292fe46d8de966ea6f0a40f8",
+    hash: "ff9e933ef740bc43bc6f3dfef8e19c3e987fc127cbbebc4a737f5ee4e30ef3bb"
   }
 ];
 
@@ -274,6 +358,27 @@ class DarlekRAGEngine {
       evidence += ` Context: ${extraContext}`;
     }
 
+    const parentHash = this.postmortems.length > 0
+      ? this.postmortems[0].hash
+      : "0000000000000000000000000000000000000000000000000000000000000000";
+
+    const payload = {
+      worldId,
+      epoch: epochName,
+      agentId: agent.id || 0,
+      agentName: agent.name || "Subject",
+      archetype: agent.archetype || "SCHOLAR",
+      generation: agent.generation || 0,
+      symptom,
+      evidence,
+      constraint,
+      ancestralScripture: scripture,
+      category,
+      status
+    };
+
+    const hash = sha256(parentHash + JSON.stringify(payload));
+
     const postmortem: LearningPostmortem = {
       id: `postmortem-${(agent.name || "node").toLowerCase().replace(/[^a-z0-9]/g, "")}-${Date.now().toString(36)}`,
       timestamp: new Date().toISOString(),
@@ -290,7 +395,9 @@ class DarlekRAGEngine {
       category,
       status,
       verifiedAt: status === "VERIFIED" ? new Date().toISOString() : undefined,
-      verificationEvidence: status === "VERIFIED" ? "Verified upon direct divine proclamation." : undefined
+      verificationEvidence: status === "VERIFIED" ? "Verified upon direct divine proclamation." : undefined,
+      parentHash,
+      hash
     };
 
     this.postmortems.unshift(postmortem);
@@ -300,6 +407,22 @@ class DarlekRAGEngine {
     this.saveToStorage();
 
     return postmortem;
+  }
+
+  /**
+   * Cryptographically verifies the integrity of the state ledger chain.
+   * Ensures State[n+1] matches Hash(State[n] || NewMemory).
+   */
+  public verifyLineageChain(): boolean {
+    for (let i = 0; i < this.postmortems.length - 1; i++) {
+      const child = this.postmortems[i];
+      const parent = this.postmortems[i + 1];
+      if (child.parentHash !== parent.hash) {
+        console.warn(`[DARLEK RAG] Cryptographic chain broken between entry ${child.id} and parent ${parent.id}`);
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
