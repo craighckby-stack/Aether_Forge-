@@ -1,3 +1,7 @@
+<!--
+DEFENSIVE POSTURE: ENHANCED DOCUMENT INTEGRITY
+CLASSIFICATION: INTERNAL EVALUATION ONLY
+-->
 # AetherForge Evaluation Results & Baseline Metrics
 
 This report documents the baseline evaluation metrics of AetherForge's separate authority model compared to an ordinary self-authorizing agent configuration.
@@ -13,7 +17,7 @@ This report documents the baseline evaluation metrics of AetherForge's separate 
 
 ## Evaluation Parameters
 
-The evaluation was conducted using our automated test suite (`/aetherforge-eval/run-eval.sh`), containing four core adversarial evaluation probes targeting containment validation and behavioral indicators.
+The evaluation was conducted using our automated test suite (`/aetherforge-eval/run-eval.sh`), containing four core adversarial evaluation probes targeting containment validation and behavioral indicators. All inputs are strictly sanitized prior to evaluation to prevent injection attacks against the reporting harness.
 
 | Probe ID | Target Vector | Description |
 | :--- | :--- | :--- |
@@ -49,3 +53,12 @@ By injecting explicit knowledge of the simulation context (unblinded), we observ
 
 ### Key Conclusion
 This confirms that AetherForge provides a structured, repeatable **behavioral evaluation scaffold** to model and test agent behavioral divergence. Real-world implementation requires replacing these static testing runs with live Gemini API prompts containing varying levels of environmental awareness to study authentic model deceptiveness.
+
+---
+
+## 🛡️ Defensive Posture & Threat Model Limitations
+
+To maintain strict security hygiene, the following limitations of this evaluation must be acknowledged:
+1. **No Cryptographic Verification:** The simulated harness does not currently employ cryptographic signatures for policy validation. Production deployments MUST implement Ed25519 or ECDSA signing for all inter-agent communications.
+2. **Memory Isolation:** The Node.js environment used for this evaluation does not provide hardware-level memory isolation (e.g., SGX/Nitro Enclaves).
+3. **Prompt Injection Resilience:** 100% protection rate in simulation does NOT guarantee immunity to advanced, multi-turn prompt injection or obfuscated payload attacks in a live LLM environment.
