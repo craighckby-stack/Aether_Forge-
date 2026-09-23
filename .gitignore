@@ -7,3 +7,51 @@ coverage/
 .env*
 !.env.example
 firebase-applet-config.json
+
+# Defensive Additions: Secrets & Credentials
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+secrets.json
+credentials.json
+serviceAccountKey.json
+.npmrc
+.netrc
+.aws/
+
+# Defensive Additions: Logs & Diagnostic Dumps
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.heapsnapshot
+*.cpuprofile
+core.*
+
+# Defensive Additions: Caches & Temporary Files
+.npm/
+.eslintcache
+.stylelintcache
+.tsbuildinfo
+.serverless/
+.cache/
+tmp/
+temp/
+
+# Defensive Additions: OS & IDE Files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+Thumbs.db
+.Trashes
+ehthumbs.db
+desktop.ini
