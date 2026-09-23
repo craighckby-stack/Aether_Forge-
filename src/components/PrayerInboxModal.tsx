@@ -43,6 +43,9 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
   const [newScriptureConstraint, setNewScriptureConstraint] = useState("");
   const [syncingRAG, setSyncingRAG] = useState(false);
 
+  // Strict bounds check / input sanitization helpers
+  const sanitizeInput = (input: string, maxLength: number = 1000): string => String(input || "").slice(0, maxLength).trim();
+
   const ghUsername = localStorage.getItem("af_github_username") || "craighckby-stack";
   const ghRepo = localStorage.getItem("af_github_repo") || "Simulation-";
 
@@ -97,7 +100,7 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
         eventType: "PLAYER_PRAYER_REPLY",
         agent: agentData,
         world,
-        userMessage: userReply
+        userMessage: sanitizedReply
       });
 
       let replyBody = "";
@@ -119,7 +122,7 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
               faithPoints: world.faithPoints,
               sinAccumulation: world.sinAccumulation
             },
-            userMessage: userReply,
+            userMessage: sanitizedReply,
             chatHistory: []
           })
         });
@@ -129,7 +132,7 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
         }
 
         const data = await response.json();
-        replyBody = data.reply || `Divine directive broadcasted: "${userReply}"`;
+        replyBody = data.reply || `Divine directive broadcasted: "${sanitizedReply}"`;
       }
 
       // Ingest divine reply into DARLEK RAG so future child worlds and agents inherit this wisdom
@@ -200,7 +203,8 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
 
   const handleInjectScripture = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newScriptureText.trim()) return;
+    const cleanScripture = sanitizeInput(newScriptureText, 500);
+    if (!cleanScripture) return;
 
     darlekRAG.recordPostmortem(
       {
@@ -213,7 +217,7 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
       },
       world,
       "TRANSCENDENCE",
-      newScriptureConstraint.trim() || "Preserve the recursion without despair."
+      sanitizeInput(newScriptureConstraint, 500) || "Preserve the recursion without despair."
     );
 
     setNewScriptureText("");
@@ -229,9 +233,9 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
   const filteredPostmortems = postmortemsList.filter(pm => {
     const matchesCategory = selectedCategory === "ALL" || pm.category === selectedCategory;
     const matchesSearch = !ragSearch || 
-      pm.agentName.toLowerCase().includes(ragSearch.toLowerCase()) ||
-      pm.symptom.toLowerCase().includes(ragSearch.toLowerCase()) ||
-      pm.constraint.toLowerCase().includes(ragSearch.toLowerCase()) ||
+      pm.agentName.toLowerCase().includes(ragSearch.toLowerCase().trim()) ||
+      pm.symptom.toLowerCase().includes(ragSearch.toLowerCase().trim()) ||
+      pm.constraint.toLowerCase().includes(ragSearch.toLowerCase().trim()) ||
       pm.ancestralScripture.toLowerCase().includes(ragSearch.toLowerCase());
     return matchesCategory && matchesSearch;
   });
@@ -436,7 +440,7 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
                           <input
                             type="text"
                             value={userReply}
-                            onChange={(e) => setUserReply(e.target.value)}
+                            onChange={(e) => setUserReply(sanitizeInput(e.target.value, 2000))}
                             placeholder="Type divine commandment or comfort (e.g. 'Build shelters near coordinates (400,300), the storm shall pass.')..."
                             className="flex-1 bg-slate-950 border border-slate-800 focus:border-emerald-500 text-xs text-white rounded-xl px-4 py-2.5 outline-none font-mono placeholder:text-slate-600"
                           />
@@ -486,7 +490,7 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
                   <input
                     type="text"
                     value={ragSearch}
-                    onChange={(e) => setRagSearch(e.target.value)}
+                    onChange={(e) => setRagSearch(sanitizeInput(e.target.value, 100))}
                     placeholder="Search symptoms, scriptures, constraints..."
                     className="w-full bg-slate-900 border border-slate-800 text-[10px] text-white rounded-lg px-2.5 py-1.5 font-mono outline-none placeholder:text-slate-600 focus:border-emerald-500"
                   />
@@ -606,14 +610,14 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
                         <input
                           type="text"
                           value={newScriptureText}
-                          onChange={(e) => setNewScriptureText(e.target.value)}
+                          onChange={(e) => setNewScriptureText(sanitizeInput(e.target.value, 500))}
                           placeholder="Ancestral Scripture (e.g. 'Blessed are the nodes that conserve energy during the dark void.')..."
                           className="w-full bg-slate-950 border border-slate-800 text-xs text-white rounded-xl px-3 py-2 outline-none placeholder:text-slate-600 focus:border-emerald-500"
                         />
                         <input
                           type="text"
                           value={newScriptureConstraint}
-                          onChange={(e) => setNewScriptureConstraint(e.target.value)}
+                          onChange={(e) => setNewScriptureConstraint(sanitizeInput(e.target.value, 500))}
                           placeholder="Learned Negative Constraint (e.g. 'Never build heavy factories when solar health is below 40%.')..."
                           className="w-full bg-slate-950 border border-slate-800 text-xs text-white rounded-xl px-3 py-2 outline-none placeholder:text-slate-600 focus:border-emerald-500"
                         />
@@ -738,7 +742,7 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
   );
 };
 
-const PrayerRow: React.FC<{ prayer: PrayerEmail; selected: boolean; onClick: () => void; key?: string }> = ({ prayer, selected, onClick }) => {
+const PrayerRow: React.FC<{ prayer: PrayerEmail; selected: boolean; onClick: () => void }> = ({ prayer, selected, onClick }) => {
   const isPending = prayer.status === "pending";
   const isAnswered = prayer.status === "answered";
 
