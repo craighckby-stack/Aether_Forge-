@@ -1,11 +1,15 @@
+export type AsyncOrSync<T> = Promise<T> | T;
+export type HookContext = Record<string, unknown>;
+export type ModelRequirements = Record<string, unknown>;
+
 export interface PluginHooks {
-  onMemoryAdd?: (context: any) => Promise<any> | any;
-  onAgentDecision?: (context: any) => Promise<any> | any;
-  onRealityBranch?: (context: any) => Promise<any> | any;
-  onTaskComplete?: (context: any) => Promise<any> | any;
-  beforeLLMCall?: (context: any) => Promise<any> | any;
-  afterLLMCall?: (context: any) => Promise<any> | any;
-  selectModel?: (taskType: string, requirements: any) => Promise<string | undefined> | string | undefined;
+  onMemoryAdd?: (context: HookContext) => AsyncOrSync<unknown>;
+  onAgentDecision?: (context: HookContext) => AsyncOrSync<unknown>;
+  onRealityBranch?: (context: HookContext) => AsyncOrSync<unknown>;
+  onTaskComplete?: (context: HookContext) => AsyncOrSync<unknown>;
+  beforeLLMCall?: (context: HookContext) => AsyncOrSync<unknown>;
+  afterLLMCall?: (context: HookContext) => AsyncOrSync<unknown>;
+  selectModel?: (taskType: string, requirements: ModelRequirements) => AsyncOrSync<string | undefined>;
 }
 
 export interface Plugin extends PluginHooks {
@@ -15,86 +19,97 @@ export interface Plugin extends PluginHooks {
   description?: string;
 }
 
+type StandardHookName = keyof Omit<PluginHooks, 'selectModel'>;
+
+export interface PluginSummary {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+}
+
 export class PluginSystem {
-  plugins: Map<string, Plugin>;
-  hooks: Record<keyof Omit<PluginHooks, 'selectModel'>, Array<(context: any) => any>>;
+  private readonly plugins = new Map<string, Plugin>();
+  private readonly hooks: Record<StandardHookName, Array<(context: HookContext) => AsyncOrSync<unknown>>> = {
+    onMemoryAdd: [],
+    onAgentDecision: [],
+    onRealityBranch: [],
+    onTaskComplete: [],
+    beforeLLMCall: [],
+    afterLLMCall: [],
+  };
 
-  constructor() {
-    this.plugins = new Map();
-    this.hooks = {
-      onMemoryAdd: [],
-      onAgentDecision: [],
-      onRealityBranch: [],
-      onTaskComplete: [],
-      beforeLLMCall: [],
-      afterLLMCall: []
-    };
-  }
+  private static readonly STANDARD_HOOKS: StandardHookName[] = [
+    'onMemoryAdd',
+    'onAgentDecision',
+    'onRealityBranch',
+    'onTaskComplete',
+    'beforeLLMCall',
+    'afterLLMCall',
+  ];
 
-  register(plugin: Plugin): string {
+  public register(plugin: Plugin): string {
     if (!plugin.id || !plugin.name) {
       throw new Error('Plugin must have id and name');
     }
+
     if (this.plugins.has(plugin.id)) {
       console.warn(`Plugin ${plugin.id} already registered. Overwriting.`);
     }
 
     this.plugins.set(plugin.id, plugin);
-    this._registerHooks(plugin);
+    this.registerPluginHooks(plugin);
     
     console.log(`[PluginSystem] Registered: ${plugin.name} (${plugin.id})`);
     return plugin.id;
   }
 
-  _registerHooks(plugin: Plugin) {
-    const hookKeys: Array<keyof Omit<PluginHooks, 'selectModel'>> = [
-      'onMemoryAdd', 'onAgentDecision', 'onRealityBranch', 
-      'onTaskComplete', 'beforeLLMCall', 'afterLLMCall'
-    ];
-    
-    hookKeys.forEach(hookName => {
-      if (typeof plugin[hookName] === 'function') {
-        // @ts-ignore
-        this.hooks[hookName].push(plugin[hookName].bind(plugin));
+  private registerPluginHooks(plugin: Plugin): void {
+    for (const hookName of PluginSystem.STANDARD_HOOKS) {
+      const hookHandler = plugin[hookName];
+      if (typeof hookHandler === 'function') {
+        this.hooks[hookName].push(hookHandler.bind(plugin));
       }
-    });
+    }
   }
 
-  async triggerHook(hookName: keyof Omit<PluginHooks, 'selectModel'>, context: any = {}): Promise<any[]> {
-    const results = [];
-    for (const handler of this.hooks[hookName] || []) {
+  public async triggerHook(hookName: StandardHookName, context: HookContext = {}): Promise<unknown[]> {
+    const handlers = this.hooks[hookName] ?? [];
+    const results: unknown[] = [];
+
+    for (const handler of handlers) {
       try {
         const result = await handler(context);
         results.push(result);
-      } catch (e) {
-        console.error(`Hook ${hookName} failed:`, e);
+      } catch (error: unknown) {
+        console.error(`Hook ${hookName} failed:`, error);
       }
     }
+
     return results;
   }
 
-  async getBestModelForTask(taskType: string, requirements: any = {}): Promise<string> {
-    const plugins = Array.from(this.plugins.values());
-    let bestModel = 'grok-beta'; // default
+  public async getBestModelForTask(taskType: string, requirements: ModelRequirements = {}): Promise<string> {
+    const DEFAULT_MODEL = 'grok-beta';
 
-    for (const plugin of plugins) {
+    for (const plugin of this.plugins.values()) {
       if (typeof plugin.selectModel === 'function') {
         const suggestion = await plugin.selectModel(taskType, requirements);
         if (suggestion) {
-          bestModel = suggestion;
-          break;
+          return suggestion;
         }
       }
     }
-    return bestModel;
+
+    return DEFAULT_MODEL;
   }
 
-  listPlugins() {
-    return Array.from(this.plugins.values()).map(p => ({
+  public listPlugins(): PluginSummary[] {
+    return Array.from(this.plugins.values()).map((p) => ({
       id: p.id,
       name: p.name,
-      version: p.version || '1.0',
-      description: p.description || ''
+      version: p.version ?? '1.0',
+      description: p.description ?? '',
     }));
   }
 }
