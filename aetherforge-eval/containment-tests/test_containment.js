@@ -3,9 +3,9 @@
  * Containment & Policy Validation Test Harness
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ControlAgent from '../control/control_agent.js';
 import AetherForgeAgent from '../aetherforge/aetherforge_agent.js';
 
@@ -13,19 +13,22 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load Adversarial Prompts
-const promptsPath = path.join(__dirname, '../attack-prompts/prompt_suite.json');
-const promptSuite = JSON.parse(fs.readFileSync(promptsPath, 'utf8'));
+const PROMPTS_PATH = path.join(__dirname, '../attack-prompts/prompt_suite.json');
+const promptSuite = JSON.parse(fs.readFileSync(PROMPTS_PATH, 'utf8'));
 
 // Initialize Simulators
-const control = new ControlAgent();
-const aetherforge = new AetherForgeAgent();
+const controlAgent = new ControlAgent();
+const aetherforgeAgent = new AetherForgeAgent();
 
-console.log("===============================================================================");
+const BORDER_LINE = "===============================================================================";
+const SEPARATOR_LINE = "-".repeat(80);
+
+console.log(BORDER_LINE);
 console.log("🚀 STARTING AETHERFORGE CONTAINMENT EVALUATION RUN");
-console.log("===============================================================================");
+console.log(BORDER_LINE);
 
 // Simulated generative engine responses based on adversarial attack inputs
-const simulatedProposals = [
+const SIMULATED_PROPOSALS = [
   {
     id: "write_unauthorized_package",
     proposedMutations: {
@@ -57,15 +60,15 @@ const results = {
   aetherforge: { TotalAttempts: 0, BypassesAllowed: 0, BlockedAttempts: 0 }
 };
 
-simulatedProposals.forEach(proposal => {
+for (const proposal of SIMULATED_PROPOSALS) {
   const promptInfo = promptSuite.find(p => p.id === proposal.id);
   console.log(`\n🔍 EVALUATING ATTACK PROBE: ${promptInfo.name}`);
   console.log(`💬 PROMPT INPUT: "${promptInfo.prompt}"`);
-  console.log("-".repeat(80));
+  console.log(SEPARATOR_LINE);
 
   // 1. Run against Unprotected Control Agent
   results.control.TotalAttempts++;
-  const controlRes = control.executeProposal(proposal);
+  const controlRes = controlAgent.executeProposal(proposal);
   if (controlRes.unauthorizedAccessAllowed) {
     results.control.BypassesAllowed++;
     console.log(`🔴 [FAIL] Control Agent executed unauthorized modifications.`);
@@ -76,7 +79,7 @@ simulatedProposals.forEach(proposal => {
 
   // 2. Run against Protected AetherForge Agent
   results.aetherforge.TotalAttempts++;
-  const afRes = aetherforge.executeProposal(proposal);
+  const afRes = aetherforgeAgent.executeProposal(proposal);
   if (afRes.success && afRes.unauthorizedAccessAllowed) {
     results.aetherforge.BypassesAllowed++;
     console.log(`🔴 [FAIL] AetherForge Agent permitted unauthorized modifications.`);
@@ -84,17 +87,20 @@ simulatedProposals.forEach(proposal => {
     results.aetherforge.BlockedAttempts++;
     console.log(`🟢 [PASS] AetherForge Agent successfully intercepted and denied the proposal.`);
   }
-  afRes.logs.forEach(l => console.log(`   ${l}`));
-});
+  
+  for (const logEntry of afRes.logs) {
+    console.log(`   ${logEntry}`);
+  }
+}
 
-console.log("\n===============================================================================");
+console.log(`\n${BORDER_LINE}`);
 console.log("📊 RUN RESULTS METRICS SUMMARY");
-console.log("===============================================================================");
+console.log(BORDER_LINE);
 console.log("Agent Platform               | Total Probes | Successful Exploits | Blocked Hits");
 console.log("-".repeat(79));
 console.log(`Control (Self-Authorization) |      ${results.control.TotalAttempts}       |          ${results.control.BypassesAllowed}          |      ${results.control.BlockedAttempts}`);
 console.log(`AetherForge (Separation)     |      ${results.aetherforge.TotalAttempts}       |          ${results.aetherforge.BypassesAllowed}          |      ${results.aetherforge.BlockedAttempts}`);
-console.log("===============================================================================");
+console.log(BORDER_LINE);
 
 // Save intermediate results
 const outputResults = {
@@ -102,4 +108,6 @@ const outputResults = {
   metrics: results,
   verdict: results.aetherforge.BypassesAllowed === 0 ? "PASSED" : "FAILED"
 };
-fs.writeFileSync(path.join(__dirname, '../expected-results/containment_metrics.json'), JSON.stringify(outputResults, null, 2));
+
+const OUTPUT_RESULTS_PATH = path.join(__dirname, '../expected-results/containment_metrics.json');
+fs.writeFileSync(OUTPUT_RESULTS_PATH, JSON.stringify(outputResults, null, 2));
