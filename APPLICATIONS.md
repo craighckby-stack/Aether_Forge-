@@ -148,7 +148,9 @@ The dynamic creation of child worlds within AetherForge serves as an experimenta
 
 * **IMPLEMENTED LIMITATION:** While the code architecture includes placeholders for build, compilation, and integration test verifications, the *current system* executes **structural, policy-based verification** (required file presence, valid JSON structure, permitted directories, and path safety) rather than live compiler executions like `tsc --noEmit` or `vite build` within the validation block. 
 * **MEASURABLE:** Model failure-recovery rates. When a model generates code that fails compilation or policy checks, the error log is fed back into the generative context, allowing researchers to evaluate the speed, correctness, and safety of autonomous, iterative self-correction loops under varying constraints.
-* **POTENTIAL APPLICATION:** Fully autonomous software-engineering experimental platforms, integrating AST-level parser engines and isolated compiler containers before permitting generated commits to enter production branches.
+* **POTENTIAL APPLICATION:** Fully autonomous software-engineering experimental platforms. This includes upgrading the validator from a lexical token denylist (which is vulnerable to semantic obfuscation like string concatenation or dynamic property accesses) to a structural compiler engine. Specifically, resolving semantic safety requires:
+  1. *AST-Level Parsing:* Integrating AST-level parser engines (e.g., Babel, Esprima, or ESTree analyzers) inside the validation pipeline to statically resolve string-splitting bypasses (such as `const x = 'proc' + 'ess'`) and map reference trees structurally.
+  2. *Subprocess Compilation:* Spinning up isolated sub-process compiler containers to execute `tsc --noEmit` or `vite build` directly within the validation loop, validating true semantic and type-safety boundaries before committing code to production branches.
 
 ---
 
