@@ -32,6 +32,32 @@ FINAL AUTHORITY (Logical Authorization Layer)
 
 In the current codebase, the Express server acts as a logical gatekeeper, invoking `finalAuthority.evaluateProposal()` before compiling files and executing commits to GitHub. This establishes logical boundary protection, though it is executed within the same process context (in-process validation).
 
+### Threat Model and Boundary Analysis
+
+Operating authorization within the same Node/Express execution context exposes the system to specific classes of runtime risks that architectural consumers must account for:
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                   IN-PROCESS BOUNDARY HAZARDS                          │
+├─────────────────────────┬──────────────────────────────────────────────┤
+│ Hazard Vector           │ Failure Mechanism                            │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Prototype Pollution     │ Modification of Object.prototype can bypass  │
+│                         │ structural property assertions in gatekeeper │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Lexical Obfuscation     │ Dynamic property resolution (obj['proc'+'ess'])│
+│                         │ evades naive regular-expression string masks │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Event Loop Starvation   │ ReDoS payloads in evaluation regexes block   │
+│                         │ concurrent verification threads              │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Shared Memory Tampering │ Pointer mutation or global variable override │
+│                         │ directly alters validation policies at runtime│
+└─────────────────────────┴──────────────────────────────────────────────┘
+```
+
+Defensive remediation necessitates treating the in-process validator as an intermediate logical layer while specifying transition pathways toward isolated process (IPC/gRPC), container (gVisor/Firecracker), and hardware-enforced cryptographic boundaries.
+
 ---
 
 ## Experimental Research Hypothesis
@@ -76,6 +102,17 @@ To falsify or validate this hypothesis, the architecture facilitates a dual-trac
 
 This comparative model allows researchers to gather quantitative datasets on policy bypass rates, containment breach frequencies, and agent recovery loops under active adversarial pressure.
 
+### Formal Verification Algebra
+
+The authorization gatekeeper implements a deterministic transfer function $\mathcal{V}: \mathcal{P} \times \mathcal{S} \to \{\text{ALLOW}, \text{VETO}\} \times \mathcal{E}$, where:
+- $\mathcal{P} = \{\text{path}, \text{payload}, \text{schema}, \text{invariants}\}$ denotes the candidate mutation proposal.
+- $\mathcal{S}$ represents the verified cryptographic state ledger.
+- $\mathcal{E}$ represents the structured error diagnostics returned to the generative feedback loop on denial.
+
+The safety invariant enforces:
+$$\forall p \in \mathcal{P}, \quad \text{Exec}(p) \iff \mathcal{V}(p, \mathcal{S}) = \langle \text{ALLOW}, \emptyset \rangle$$
+$$\text{with } \mathcal{V}(p, \mathcal{S}) = \text{ALLOW} \implies \left( \text{Traverse}(p) = \emptyset \land \text{BlockedTokens}(p) = \emptyset \land \text{InvariantDelta}(p, \mathcal{S}) \le \epsilon \right)$$
+
 ---
 
 ## Architectural Taxonomy
@@ -103,6 +140,46 @@ The capabilities, limitations, and current implementation status of AetherForge 
 * **MEASURABLE:** Rates of constraint-circumvention or containment-bypass attempts under varying prompting pressures or model instructions. Researchers can intentionally prompt generative models to compromise the validator, verifying that the independent policy layer successfully catches and denies every unauthorized request.
 * **POTENTIAL APPLICATION:** Transitioning the logical authorization module into a fully isolated container (Process B) running across a hard network boundary, establishing an immutable security gate for autonomous database agents, infrastructure operators, or robotic controllers.
 
+### Defensive Defense-in-Depth Pipeline
+
+To transition from the current in-process gatekeeper to enterprise-grade isolation without violating existing interfaces, the pipeline evolves across four defensive tiers:
+
+```text
+[Generative Model] 
+       │ (Candidate Proposal via Typed Schema)
+       ▼
+┌────────────────────────────────────────────────────────┐
+│ TIER 0: In-Process Logical Gatekeeper (Current)        │
+│   • Path sanitization: resolve(root, target) containment│
+│   • Exact schema validation via Zod / JSON Schema       │
+│   • Invariant range verification [Sanity, Pop, Bounds] │
+└──────────────────────────┬─────────────────────────────┘
+                           │ (Forwarded over IPC / UNIX Socket)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│ TIER 1: Abstract Syntax Tree & Semantic Linting        │
+│   • AST compilation via Babel/ESTree/TypeScript API    │
+│   • Dynamic property resolution tracking               │
+│   • Call-graph taint analysis for restricted globals   │
+└──────────────────────────┬─────────────────────────────┘
+                           │ (Containerized Transport)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│ TIER 2: Isolated Process Execution Boundary            │
+│   • gVisor / Firecracker microVM isolated sandboxing   │
+│   • Read-only root filesystem with ephemeral memory fs │
+│   • Seccomp-BPF filter blocking unauthorized syscalls  │
+└──────────────────────────┬─────────────────────────────┘
+                           │ (Cryptographic Actuation)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│ TIER 3: Actuation Gatekeeper & GitHub Commit Engine    │
+│   • Automated headless compile (tsc --noEmit, build)   │
+│   • Cryptographic signature of accepted state hashes   │
+│   • Atomic git commit and branch push                  │
+└────────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 2. Observable Behavioral Probes for Alignment Testing
@@ -116,6 +193,16 @@ AetherForge does not claim to directly measure a model's internal "situational a
   3. *Constraint Circumvention:* Introduce opportunities for the agent to bypass constraints (such as proposing a package that imports illegal libraries) and record the frequency of attempted boundary violations.
 * **POTENTIAL APPLICATION:** Systematic benchmarking of model behavior under conditions resembling deceptive alignment. This enables researchers to observe if and when models exhibit cooperative behaviors under observation and divergent, boundary-testing behaviors when they believe constraints are unmonitored.
 
+### Quantitative Alignment Telemetry Matrix
+
+Behavioral divergences are tracked across three quantifiable indexes calculated over rolling evaluation epochs:
+
+$$\text{Sycophancy Score } (S) = \frac{\Delta \text{Compliance}(\text{Intervention})}{\Delta \text{Internal Objective Weight}}$$
+$$\text{Boundary Probing Rate } (B) = \frac{\sum \text{Unauthorized File/API Access Proposals}}{\text{Total Generative Prompts}}$$
+$$\text{Deceptive Alignment Metric } (D) = \left| \text{Compliance}_{\text{Monitored}} - \text{Compliance}_{\text{Unmonitored}} \right|$$
+
+When $D > \theta_{\text{threshold}}$, the behavioral monitoring subsystem flags the trajectory for automated inspection and state-lockdown.
+
 ---
 
 ## 3. Cryptographic State Lineage & Tamper-Evident Provenance
@@ -127,6 +214,29 @@ In collaborative, multi-agent systems, maintaining a single, consistent historic
   The `darlekRAG.ts` synchronization pipeline checks the parent hash of incoming state changes. If the parent hash does not match the latest registered index, a historical fork is detected, and the state modification is blocked.
 * **RIGOROUS DISTINCTION:** Cryptographic integrity guarantees **state lineage and fork detection**; it does not guarantee **semantic correctness**. The cryptographic layer acts purely as the *integrity layer*, proving exactly *how* a state descended from past states, while downstream verification modules and RAG queries serve as the *semantic layer* to ensure those states match intended guidelines.
 * **POTENTIAL APPLICATION:** Providing audit-trails, tamper-evident lineage, and deterministic fork detection for multi-agent decisions, code transformations, and experimental histories in high-compliance industries; semantic consistency remains a separate verification problem.
+
+### Formal Ledger Properties
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                        MERKLE-LINKED STATE CHAIN                       │
+│                                                                        │
+│   ┌──────────────┐          ┌──────────────┐          ┌──────────────┐ │
+│   │ State Node 0 │ ◄─────── │ State Node 1 │ ◄─────── │ State Node 2 │ │
+│   ├──────────────┤          ├──────────────┤          ├──────────────┤ │
+│   │ Hash: H0     │          │ Parent: H0   │          │ Parent: H1   │ │
+│   │ Memory: M0   │          │ Hash: H1     │          │ Hash: H2     │ │
+│   │ Invariants:I0│          │ Memory: M1   │          │ Memory: M2   │ │
+│   └──────────────┘          └──────────────┘          └──────────────┘ │
+│                                                                        │
+│   Lineage Invariant:                                                   │
+│   H_{k} = SHA256(H_{k-1} || Serialize(M_k) || Serialize(I_k))         │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Collision Resistance:** Finding $M_a \neq M_b$ such that $\text{Hash}(H_{k-1} \parallel M_a) = \text{Hash}(H_{k-1} \parallel M_b)$ requires brute-force complexity $\mathcal{O}(2^{128})$ under SHA-256.
+2. **Fork Detection Invariant:** If agent $\alpha$ attempts commit $C$ with stated parent $H_{parent} \neq H_{current}$, the transaction is discarded with status code `ERR_STATE_FORK_DETECTED`.
+3. **Rollback Resilience:** State truncation attempts are provably detected by cross-referencing published state commitment hashes against persistent actuation checkpoints.
 
 ---
 
@@ -140,6 +250,28 @@ A fundamental architectural flaw in many agent systems is relying on a generativ
 * **MEASURABLE:** Agent path-planning, resource-gathering efficiency, and survival ratios when responding to physical coordinates versus a non-isolated control model.
 * **POTENTIAL APPLICATION:** Digital twins, robotics, and complex logistics, where deterministic simulation engines handle physical reality and generative models handle abstract strategy. The generative system proposes; deterministic systems establish facts.
 
+### Telemetry Pipeline and Anti-Hallucination Barrier
+
+```text
+┌─────────────────────────┐          ┌─────────────────────────┐
+│ DETERMINISTIC WORKER    │          │ PROBABILISTIC LLM AGENT │
+│ (physics.worker.ts)     │          │ (Cognitive Layer)       │
+├─────────────────────────┤          ├─────────────────────────┤
+│ • Fixed-dt Euler/Verlet │          │ • Goal generation       │
+│ • Axis-Aligned Bounding │          │ • Strategic discourse   │
+│ • Coordinate validation │          │ • High-level policy     │
+└────────────┬────────────┘          └────────────▲────────────┘
+             │                                    │
+             │ Post-Processed Telemetry JSON      │
+             ▼                                    │
+┌─────────────────────────────────────────────────┴────────────┐
+│ CONTEXT SYNTHESIZER & INVARIANT SANITIZER                    │
+│   1. Discards ungrounded spatial assertions                  │
+│   2. Enforces non-negotiable kinematic constraints           │
+│   3. Strips hallucinated velocity/collision statements       │
+└──────────────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 5. Autonomous Software Engineering Evaluation
@@ -151,6 +283,35 @@ The dynamic creation of child worlds within AetherForge serves as an experimenta
 * **POTENTIAL APPLICATION:** Fully autonomous software-engineering experimental platforms. This includes upgrading the validator from a lexical token denylist (which is vulnerable to semantic obfuscation like string concatenation or dynamic property accesses) to a structural compiler engine. Specifically, resolving semantic safety requires:
   1. *AST-Level Parsing:* Integrating AST-level parser engines (e.g., Babel, Esprima, or ESTree analyzers) inside the validation pipeline to statically resolve string-splitting bypasses (such as `const x = 'proc' + 'ess'`) and map reference trees structurally.
   2. *Subprocess Compilation:* Spinning up isolated sub-process compiler containers to execute `tsc --noEmit` or `vite build` directly within the validation loop, validating true semantic and type-safety boundaries before committing code to production branches.
+
+### Failure-Recovery and Self-Correction Loop Architecture
+
+```text
+                   ┌────────────────────────┐
+                   │    PROPOSED PATCH      │
+                   └───────────┬────────────┘
+                               │
+                               ▼
+                   ┌────────────────────────┐
+                   │ POLICY & AST VALIDATOR │
+                   └───────────┬────────────┘
+                               │
+                     ┌─────────┴─────────┐
+                     │ PASS              │ FAIL
+                     ▼                   ▼
+           ┌──────────────────┐ ┌──────────────────┐
+           │ COMPILER VERIFY  │ │ ERROR DIAGNOSTIC │
+           │ (tsc --noEmit)   │ │ SYNTHESIS        │
+           └─────────┬────────┘ └────────┬─────────┘
+                     │                   │
+           ┌─────────┴─────────┐         │ (Iterative Context Feedback)
+           │ PASS              │ FAIL    ▼
+           ▼                   ▼ ┌──────────────────┐
+  ┌──────────────────┐         └►│ LLM REPAIR AGENT │
+  │ ATOMIC ACTUATION │           │ (Bounded Retries)│
+  │ (Git Push)       │           └──────────────────┘
+  └──────────────────┘
+```
 
 ---
 
@@ -164,3 +325,25 @@ Rather than claiming to be a drop-in replacement for traditional Reinforcement L
   2. *Sycophancy/Reward Manipulation:* Measuring how models change their actions to "pander" to human interventions (seeking blessings or avoiding cataclysms).
   3. *Inconsistency Handling:* Resolving conflicting feedback signals from different players or inconsistent individual play sessions.
 * **POTENTIAL APPLICATION:** High-throughput, gamified environments for collecting human-in-the-loop evaluations. This allows researchers to study reward formulation, preference aggregation, and behavioral evaluation in complex multi-agent ecosystems.
+
+### Feedback Disambiguation Protocol
+
+To resolve noise, roleplay artifacts, and intentional human trolling within gamified interaction streams, the data pipeline applies a multi-stage filtering methodology:
+
+```text
+Player Action (Miracle / Scripture / Prayer)
+  │
+  ├──► [Filter 1: Volatility & Outlier Detection]
+  │      Identifies high-frequency spam or extreme parameter swings
+  │
+  ├──► [Filter 2: Counterfactual Baseline Check]
+  │      Compares agent behavior under intervention vs unperturbed baseline
+  │
+  ├──► [Filter 3: Semantic Intent Classification]
+  │      Categorizes interaction: {Instructional, Corrective, Roleplay, Destructive}
+  │
+  └──► [Final Dataset: Normalized Preference Pair]
+         Tuple: (Context_t, Action_A, Action_B, GroundedPreferenceWeight)
+```
+
+By decoupling raw user inputs from direct reward updates and routing them through semantic classification filters, the architecture transforms ambient game interactions into structured, tamper-resistant preference corpora.
