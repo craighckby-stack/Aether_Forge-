@@ -60,7 +60,7 @@ Inspired by [`craighckby-stack/EMG`](https://github.com/craighckby-stack/EMG):
 
 ## 📁 Repository Structure & Artifacts
 
-When connected to GitHub via the Neural Link panel (`craighckby-stack/Simulation-` or a user repository), the simulation automatically manages and commits:
+When connected to GitHub via the Neural Link panel (`craighckby-stack/AetherForge-2` or a user repository), the simulation automatically manages and commits:
 
 ```text
 ├── rag/
@@ -93,8 +93,8 @@ When connected to GitHub via the Neural Link panel (`craighckby-stack/Simulation
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/craighckby-stack/Simulation-.git
-   cd Simulation-
+   git clone https://github.com/craighckby-stack/AetherForge-2.git
+   cd AetherForge-2
    ```
 
 2. **Install dependencies:**

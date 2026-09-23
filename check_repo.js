@@ -9,7 +9,7 @@ const get = (url) => new Promise((resolve, reject) => {
 });
 
 async function run() {
-  const repoInfo = await get('https://api.github.com/repos/craighckby-stack/Simulation-');
+  const repoInfo = await get('https://api.github.com/repos/craighckby-stack/AetherForge-2');
   console.log('Repo Name:', repoInfo.name);
   console.log('Description:', repoInfo.description);
 }
