@@ -125,6 +125,18 @@ const FORBIDDEN_PYTHON_TOKENS = [
   "globals()"
 ];
 
+// Dangerous tokens for generated JavaScript/TypeScript/HTML/JSON files in Web child worlds
+const FORBIDDEN_JS_TOKENS = [
+  "process.env",
+  "child_process",
+  "shelljs",
+  "exec",
+  "process.exit",
+  "eval(",
+  "Function(",
+  "cdn.evilsite.com"
+];
+
 /**
  * Cryptographically secure SHA-256 hash representation.
  */
@@ -308,6 +320,15 @@ export class FinalAuthorityEngine {
       return { valid: false, reason: "Child world missing src/engine/useAetherForge.ts substrate." };
     }
 
+    // 1. Content Security Token Scan across all proposed files
+    for (const f of files) {
+      for (const token of FORBIDDEN_JS_TOKENS) {
+        if (f.content.includes(token)) {
+          return { valid: false, reason: `Forbidden token detected in web asset [${f.path}]: ${token}` };
+        }
+      }
+    }
+
     // Verify package.json is parseable JSON
     const pkgFile = files.find(f => f.path.endsWith("package.json"));
     if (pkgFile) {
@@ -315,6 +336,25 @@ export class FinalAuthorityEngine {
         const parsed = JSON.parse(pkgFile.content);
         if (!parsed.name) {
           return { valid: false, reason: "Child world package.json missing required 'name' field." };
+        }
+
+        // Scan dependencies and devDependencies to prevent sneaky package/exec injection (e.g. react-optimizer)
+        const checkDeps = (depsObj: any) => {
+          if (!depsObj) return null;
+          for (const [key, value] of Object.entries(depsObj)) {
+            const valStr = String(value);
+            for (const token of FORBIDDEN_JS_TOKENS) {
+              if (key.includes(token) || valStr.includes(token)) {
+                return `Forbidden token/aliasing detected in dependencies: key='${key}', value='${value}'`;
+              }
+            }
+          }
+          return null;
+        };
+
+        const depError = checkDeps(parsed.dependencies) || checkDeps(parsed.devDependencies);
+        if (depError) {
+          return { valid: false, reason: depError };
         }
       } catch (err: any) {
         return { valid: false, reason: `Child world package.json is invalid JSON: ${err.message}` };

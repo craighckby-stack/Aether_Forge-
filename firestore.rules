@@ -92,7 +92,7 @@ service cloud.firestore {
         allow read: if true;
         allow create: if isSignedIn() && isValidId(agentId) && isValidAgent(incoming());
         allow update: if isSignedIn() && isValidId(agentId) && isValidAgent(incoming()) && incoming().id == existing().id;
-        allow delete: if isSignedIn();
+        allow delete: if false; // Lifecycle deletion is server-authoritative only, blocking client-side griefing
       }
 
       match /events/{eventId} {
