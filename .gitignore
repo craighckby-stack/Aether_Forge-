@@ -21,6 +21,17 @@ serviceAccountKey.json
 .npmrc
 .netrc
 .aws/
+*id_rsa*
+*id_ed25519*
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+client_secret*.json
+.env.vault
+.env.local
+.env.*.local
+*.kdbx
 
 # Defensive Additions: Logs & Diagnostic Dumps
 npm-debug.log*
@@ -31,6 +42,7 @@ lerna-debug.log*
 *.heapsnapshot
 *.cpuprofile
 core.*
+*.stackdump
 
 # Defensive Additions: Caches & Temporary Files
 .npm/
@@ -41,6 +53,26 @@ core.*
 .cache/
 tmp/
 temp/
+.turbo/
+.parcel-cache/
+.next/
+.nuxt/
+.output/
+.svelte-kit/
+storybook-static/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Defensive Additions: Testing & Diagnostic Outputs
+.nyc_output/
+cypress/videos/
+cypress/screenshots/
+playwright-report/
+test-results/
+blob-report/
 
 # Defensive Additions: OS & IDE Files
 .vscode/*
@@ -55,3 +87,8 @@ Thumbs.db
 .Trashes
 ehthumbs.db
 desktop.ini
+*.sublime-workspace
+*.sublime-project
+.history/
+*.bak
+*.tmp
