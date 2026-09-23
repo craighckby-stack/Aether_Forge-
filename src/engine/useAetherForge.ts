@@ -16,7 +16,7 @@ let firebaseCooldownUntil = 0;
 
 async function withFirebaseWrite<T>(op: () => Promise<T>, retries = 3): Promise<T> {
   return new Promise((resolve, reject) => {
-    firebaseWriteLock = firebaseWriteLock.then(async () => {
+    firebaseWriteLock = firebaseWriteLock.catch(() => {}).then(async () => {
       for (let i = 0; i < retries; i++) {
         const now = Date.now();
         if (now < firebaseCooldownUntil) {
@@ -2198,7 +2198,7 @@ export function useAetherForge(selectedWorldId: string = "prime-resonance") {
       setWorld({ ...worldState });
       setResources([...resourcesRef.current]);
     }
-  }, [isPaused, simSpeed, addEvent]);
+  }, [isPaused, simSpeed, addEvent, isStoryPlaying]);
 
   const setNationIdeology = useCallback((nationId: string, ideology: Ideology) => {
     worldRef.current.nations = worldRef.current.nations.map(n => {

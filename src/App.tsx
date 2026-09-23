@@ -334,7 +334,7 @@ export default function App() {
                   setSelectedWorldId(worldId);
                   setIsGenealogyOpen(false);
                 }}
-                onCreateWorld={async (name, parentId) => {
+                onCreateNewWorld={async (name, parentId) => {
                   const newId = await createNewWorld(name, parentId, window.innerWidth, window.innerHeight);
                   return newId;
                 }}

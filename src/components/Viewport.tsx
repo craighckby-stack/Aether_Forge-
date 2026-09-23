@@ -28,7 +28,7 @@ export const Viewport = ({
 
     // Reset playback when story starts
     if (isStoryPlaying) {
-      setPlaybackProgress(0);
+      setPlaybackProgress(prev => prev === 0 ? prev : 0);
       playbackTime = 0;
     }
 

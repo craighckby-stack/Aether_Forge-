@@ -255,6 +255,7 @@ function getEffectiveGithubToken(clientToken?: string): string | null {
 const ALLOWED_REPOS = new Set([
   "AetherForge-2",
   "Aether_Forge",
+  "Aether_Forge-",
   "AetherForge",
   "aetherforge",
   "aether-forge",
