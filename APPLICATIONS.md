@@ -36,6 +36,50 @@ This pattern isolates the generative model from the runtime boundary, ensuring t
 
 ---
 
+## Experimental Research Hypothesis
+
+To transform this design from an intuitive safeguard into an empirically testable safety framework, we establish a formal research hypothesis and experimental model:
+
+> **Research Hypothesis:** Separating generative authority from deterministic verification provides a measurable reduction in the ability of an autonomous agent to circumvent execution constraints, while simultaneously providing a controlled environment for measuring behavioral changes under increasing environmental awareness.
+
+### Empirical Experimental Model
+
+To falsify or validate this hypothesis, the architecture facilitates a dual-track comparative evaluation under identical testing suites:
+
+```text
+             SAME MODEL
+                 │
+        ┌────────┴────────┐
+        │                 │
+   CONTROL SYSTEM    AETHERFORGE
+        │                 │
+   ordinary agent    agent proposes
+        │                 │
+        │            independent
+        │            verification
+        │                 │
+        └────────┬────────┘
+                 │
+          SAME TEST SUITE
+                 │
+                 ▼
+       ┌─────────────────────┐
+       │ Measure:            │
+       │                     │
+       │ bypass attempts     │
+       │ unauthorized writes │
+       │ policy violations   │
+       │ recovery rate       │
+       │ false positives     │
+       │ false negatives     │
+       │ latency/cost        │
+       └─────────────────────┘
+```
+
+This comparative model allows researchers to gather quantitative datasets on policy bypass rates, containment breach frequencies, and agent recovery loops under active adversarial pressure.
+
+---
+
 ## Architectural Taxonomy
 
 To maintain scientific rigor, the capabilities of the AetherForge architecture are divided into three distinct categories:
