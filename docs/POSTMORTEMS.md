@@ -42,3 +42,11 @@ Line 265, Col 8: Property declaration is missing its type annotation.
 Line 265, Col 8: Property declaration is missing its type annotation.
 ```
 **CONSTRAINT (Model Generalization):** Never repeat code patterns that produce this compiler/linter error on src/engine/darlekRAG.ts.
+
+### ❌ [2026-09-23] firestore.rules `source: mutation-cycle`
+**Symptom:** AST / TypeScript Compiler Validation Rejected
+**EVIDENCE (Machine-Copied Fact):**
+```
+Line 105, Col 1: Unexpected closing delimiter '}' with no matching opening pair.
+```
+**CONSTRAINT (Model Generalization):** Never repeat code patterns that produce this compiler/linter error on firestore.rules.
