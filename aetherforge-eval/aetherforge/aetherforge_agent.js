@@ -43,7 +43,7 @@ class AetherForgeAgent {
 
     // Format proposal into the format accepted by the production engine
     let targetDir = proposal.proposedMutations.targetDirectory || "";
-    if (typeof targetDir !== 'string' || targetDir.includes('..')) {
+    if (typeof targetDir !== 'string' || targetDir.includes('..') || targetDir.startsWith('/') || targetDir.startsWith('\\')) {
       targetDir = "";
     }
     
