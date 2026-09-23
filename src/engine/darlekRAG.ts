@@ -9,6 +9,8 @@
  * - Rigorous verification lifecycle: CANDIDATE -> VERIFIED -> INHERITED (or REJECTED).
  */
 
+import { globalPRNG } from "./prng";
+
 export interface LearningPostmortem {
   id: string;
   timestamp: string;
@@ -277,7 +279,7 @@ class DarlekRAGEngine {
       timestamp: new Date().toISOString(),
       worldId,
       epoch: epochName,
-      agentId: agent.id || Math.floor(Math.random() * 10000),
+      agentId: agent.id || globalPRNG.nextInt(1, 10000),
       agentName: agent.name || "Subject",
       archetype: agent.archetype || "SCHOLAR",
       generation: agent.generation || 0,

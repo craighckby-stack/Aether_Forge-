@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { darlekRAG, LearningPostmortem } from "../engine/darlekRAG";
 import { emgGate } from "../engine/emgGate";
 import { getGitHubConfig } from "../lib/github";
+import { globalPRNG } from "../engine/prng";
 
 interface PrayerInboxModalProps {
   isOpen: boolean;
@@ -203,7 +204,7 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
 
     darlekRAG.recordPostmortem(
       {
-        id: Math.floor(Math.random() * 10000),
+        id: globalPRNG.nextInt(1, 10000),
         name: "Observer-Decree",
         archetype: "MESSIAH",
         generation: world.population,
@@ -217,7 +218,7 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
 
     setNewScriptureText("");
     setNewScriptureConstraint("");
-    setSuccessMsg("✓ Divine decree directly injected into DARLEK RAG knowledge base!");
+    setSuccessMsg("✓ Injected as unverified CANDIDATE scripture. Authority verification required!");
     setTimeout(() => setSuccessMsg(""), 3500);
   };
 
@@ -597,6 +598,9 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
                       </div>
                       <p className="text-[10px] text-slate-400">
                         Add a proverb or constraint directly to this universe and all child universes without calling Gemini.
+                      </p>
+                      <p className="text-[9px] text-amber-400 font-semibold bg-amber-950/20 p-2.5 rounded-lg border border-amber-900/30">
+                        ⚠️ INJECTED SCRIPTURE: Manually injected scriptures are recorded as unverified CANDIDATE-state wisdom, requiring official system verification.
                       </p>
                       <form onSubmit={handleInjectScripture} className="space-y-2">
                         <input

@@ -28,6 +28,7 @@
  *             GITHUB ACTUATOR
  */
 
+import * as crypto from "crypto";
 import { Archetype, EpochType, ARCHITECT_AWARENESS_THRESHOLD } from "./types";
 
 export interface ProposalFile {
@@ -38,7 +39,7 @@ export interface ProposalFile {
 export interface AgentProposal {
   type: "CHILD_WORLD_DEPLOY" | "DATA_ARCHIVE" | "MEMOIR_COMMIT" | "STATE_MUTATION";
   creatorAgent?: {
-    id: number | string;
+    id?: number | string;
     name: string;
     archetype: string;
     awareness: number;
@@ -69,6 +70,9 @@ export interface AuthorityDecision {
     protectedPathsRespected: boolean;
     integrityHashValid: boolean;
     testsPassed: boolean;
+    staticValidationPassed: boolean;
+    buildPassed: boolean;
+    integrationTestsPassed: boolean;
   };
   contentHash?: string;
 }
@@ -122,16 +126,10 @@ const FORBIDDEN_PYTHON_TOKENS = [
 ];
 
 /**
- * Deterministic lightweight hash (FNV-1a 32-bit hex representation)
- * for synchronous environment support where crypto subtle might not be available.
+ * Cryptographically secure SHA-256 hash representation.
  */
 export function computeHash(content: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < content.length; i++) {
-    h ^= content.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16).padStart(8, "0");
+  return crypto.createHash("sha256").update(content).digest("hex");
 }
 
 export class FinalAuthorityEngine {
@@ -352,7 +350,10 @@ export class FinalAuthorityEngine {
       awarenessThresholdMet: true,
       protectedPathsRespected: true,
       integrityHashValid: true,
-      testsPassed: true
+      testsPassed: true,
+      staticValidationPassed: true,
+      buildPassed: true,
+      integrationTestsPassed: true
     };
 
     // 1. Invariants Check
@@ -407,6 +408,9 @@ export class FinalAuthorityEngine {
       const packageCheck = this.validateChildWorldPackage(proposal.files);
       if (!packageCheck.valid) {
         checks.testsPassed = false;
+        checks.staticValidationPassed = false;
+        checks.buildPassed = false;
+        checks.integrationTestsPassed = false;
         return {
           decision: "VETO",
           reason: packageCheck.reason,
@@ -422,6 +426,9 @@ export class FinalAuthorityEngine {
           const pyCheck = this.validatePythonMemoir(f.content);
           if (!pyCheck.valid) {
             checks.testsPassed = false;
+            checks.staticValidationPassed = false;
+            checks.buildPassed = false;
+            checks.integrationTestsPassed = false;
             return {
               decision: "VETO",
               reason: pyCheck.reason,

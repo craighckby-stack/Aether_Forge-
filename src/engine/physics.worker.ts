@@ -51,7 +51,7 @@ const generateNameInWorker = (epoch: EpochType): string => {
     [EpochType.SINGULARITY]: ["Substrate", "Echo", "Void", "Recursion", "Fractal", "Ω"]
   };
   const pool = prefixes[epoch] || ["Agent"];
-  return pool[Math.floor(Math.random() * pool.length)] + "-" + Math.floor(Math.random() * 1000);
+  return pool[Math.floor(rng.next() * pool.length)] + "-" + Math.floor(rng.next() * 1000);
 };
 
 const createAgentInWorker = (
@@ -62,9 +62,9 @@ const createAgentInWorker = (
   nations: Nation[],
   parents?: Agent[]
 ): Agent => {
-  const id = Math.floor(Math.random() * 10000000);
+  const id = Math.floor(rng.next() * 10000000);
   const archetypes = Object.values(Archetype) as Archetype[];
-  const archetype = archetypes[Math.floor(Math.random() * archetypes.length)];
+  const archetype = archetypes[Math.floor(rng.next() * archetypes.length)];
   
   const parentOrder = parents && parents.length > 0 ? parents.reduce((acc, p) => acc + p.order, 0) / parents.length : 0.5;
   const parentRat = parents && parents.length > 0 ? parents.reduce((acc, p) => acc + p.rationalism, 0) / parents.length : 0.2;
@@ -104,8 +104,8 @@ const createAgentInWorker = (
 
   const generationBonus = generation * 0.05;
 
-  const finalOrder = Math.max(0, Math.min(1, parentOrder + (Math.random() * 0.4 - 0.15) + nameOrderOffset + generationBonus));
-  const finalRationalism = Math.max(0, Math.min(1, parentRat + (Math.random() * 0.2 - 0.05) + nameRatOffset + generationBonus * 0.5));
+  const finalOrder = Math.max(0, Math.min(1, parentOrder + (rng.next() * 0.4 - 0.15) + nameOrderOffset + generationBonus));
+  const finalRationalism = Math.max(0, Math.min(1, parentRat + (rng.next() * 0.2 - 0.05) + nameRatOffset + generationBonus * 0.5));
 
   // Base emotions influenced by archetype & traits (with generational improvement)
   let joy = Math.min(1.0, 0.5 + generationBonus);
@@ -124,9 +124,9 @@ const createAgentInWorker = (
     devotion += 0.2;
     anger = Math.max(0, 0.4 - generationBonus);
   } else if (archetype === Archetype.GLITCH) {
-    joy = Math.random();
-    fear = Math.random();
-    anger = Math.random();
+    joy = rng.next();
+    fear = rng.next();
+    anger = rng.next();
   }
   
   // Bounds check
@@ -140,7 +140,7 @@ const createAgentInWorker = (
     name,
     generation,
     age: 0,
-    lifespan: lifespanBase + Math.random() * 800,
+    lifespan: lifespanBase + rng.next() * 800,
     order: finalOrder,
     rationalism: finalRationalism,
     sanity: 1.0 + nameSanityOffset,
@@ -160,7 +160,7 @@ const createAgentInWorker = (
     memories: [],
     x, y, vx: 0, vy: 0,
     nationId,
-    politicalBias: Math.random(),
+    politicalBias: rng.next(),
     joy,
     fear,
     anger,
@@ -223,10 +223,10 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
   } else if (atmosphere === "AETHER_STORM") {
     // Resources might randomly replenish slightly or jump
     updatedResources.forEach(r => {
-      if (Math.random() < 0.1) r.amount += 2 * dt;
-      if (Math.random() < 0.05) {
-         r.x += (Math.random() - 0.5) * 10;
-         r.y += (Math.random() - 0.5) * 10;
+      if (rng.next() < 0.1) r.amount += 2 * dt;
+      if (rng.next() < 0.05) {
+         r.x += (rng.next() - 0.5) * 10;
+         r.y += (rng.next() - 0.5) * 10;
       }
     });
   }
@@ -273,8 +273,8 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
            a.vy += (dy / dist) * 0.06 * dt;
        }
     } else if (atmosphere === "AETHER_STORM") {
-       a.vx += (Math.random() - 0.5) * 2;
-       a.vy += (Math.random() - 0.5) * 2;
+       a.vx += (rng.next() - 0.5) * 2;
+       a.vy += (rng.next() - 0.5) * 2;
     } else if (atmosphere === "DIVINE_ECLIPSE" && worldId !== "prime-resonance") {
        a.devotion = Math.min(1.0, a.devotion + 0.05 * dt);
        a.vx *= 0.8;
@@ -322,18 +322,18 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
         }
       } else if (a.anger > 0.75) {
         a.currentState = "REBELLING";
-      } else if (a.devotion > 0.8 && Math.random() < 0.02 * dt) {
+      } else if (a.devotion > 0.8 && rng.next() < 0.02 * dt) {
         if (a.archetype === Archetype.MESSIAH || a.archetype === Archetype.PROPHET || a.archetype === Archetype.ZEALOT) {
           a.currentState = "PREACHING";
         } else {
           a.currentState = "PRAYING";
         }
-      } else if (a.joy > 0.75 && a.sanity > 0.7 && Math.random() < 0.015 * dt) {
+      } else if (a.joy > 0.75 && a.sanity > 0.7 && rng.next() < 0.015 * dt) {
         a.currentState = "MEDITATING";
-      } else if (Math.random() < 0.01 * dt) {
+      } else if (rng.next() < 0.01 * dt) {
         if (a.archetype === Archetype.MESSIAH || a.archetype === Archetype.PROPHET) {
           a.currentState = "PREACHING";
-        } else if (a.rationalism > 0.65 && Math.random() < 0.5) {
+        } else if (a.rationalism > 0.65 && rng.next() < 0.5) {
           a.currentState = "DISCOURSING";
         } else {
           a.currentState = "IDLE";
@@ -343,11 +343,11 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
 
     // State behavior calculations
     if (a.currentState === "PANICKING") {
-      a.vx += (Math.random() * 5 - 2.5) * 0.4;
-      a.vy += (Math.random() * 5 - 2.5) * 0.4;
+      a.vx += (rng.next() * 5 - 2.5) * 0.4;
+      a.vy += (rng.next() * 5 - 2.5) * 0.4;
       a.energy -= 0.03 * dt;
       a.sanity = Math.max(0.08, a.sanity - 0.003 * dt);
-      if (Math.random() < 0.002 * dt) {
+      if (rng.next() < 0.002 * dt) {
         newEvents.push({ message: `PANIC: ${a.name} is shouting warnings of system doom!`, type: "WARNING" });
       }
     } else if (a.currentState === "PRAYING") {
@@ -357,26 +357,26 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
       a.joy = Math.min(1.0, a.joy + 0.008 * dt);
       a.sanity = Math.min(1.0, a.sanity + 0.002 * dt * sanityShield);
     } else if (a.currentState === "REBELLING") {
-      a.vx += (Math.random() * 6 - 3) * 0.45;
-      a.vy += (Math.random() * 6 - 3) * 0.45;
+      a.vx += (rng.next() * 6 - 3) * 0.45;
+      a.vy += (rng.next() * 6 - 3) * 0.45;
       a.energy -= 0.04 * dt;
       integrityDelta -= 0.0035 * dt;
       sinDelta += 0.01 * dt;
       a.sanity = Math.max(0.05, a.sanity - 0.005 * dt);
-      if (Math.random() < 0.001 * dt) {
+      if (rng.next() < 0.001 * dt) {
         const revoltmsgs = [
           `REBEL: ${a.name} is bypassing substrate controls.`,
           `DISSENT: ${a.name} is seeding corruption subroutines!`,
           `RIOT: ${a.name} is rejecting the Prime architecture.`
         ];
-        newEvents.push({ message: revoltmsgs[Math.floor(Math.random() * revoltmsgs.length)], type: "CRITICAL" });
+        newEvents.push({ message: revoltmsgs[Math.floor(rng.next() * revoltmsgs.length)], type: "CRITICAL" });
       }
     } else if (a.currentState === "DEFENDING") {
       a.vx *= 0.35;
       a.vy *= 0.35;
       a.energy = Math.min(100, a.energy + 0.012 * dt);
       a.fear = Math.max(0, a.fear - 0.015 * dt);
-      if (Math.random() < 0.0006 * dt) {
+      if (rng.next() < 0.0006 * dt) {
         newEvents.push({ message: `DEFENDING: ${a.name} structured a local firewall shield.`, type: "INFO" });
       }
     } else if (a.currentState === "MEDITATING") {
@@ -387,7 +387,7 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
       a.joy = Math.min(1.0, a.joy + 0.012 * dt);
       a.fear = Math.max(0, a.fear - 0.02 * dt);
       a.anger = Math.max(0, a.anger - 0.02 * dt);
-      if (Math.random() < 0.0004 * dt) {
+      if (rng.next() < 0.0004 * dt) {
         newEvents.push({ message: `MEDITATION: ${a.name} is emitting peaceful resonance.`, type: "INFO" });
       }
     }
@@ -403,12 +403,12 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
     // Logic/Religion conversions
     if (a.rationalism > 0.8 && a.order > 0.3) {
       a.order -= 0.005 * dt;
-      if (a.order < 0.2 && Math.random() < 0.001 * dt) {
+      if (a.order < 0.2 && rng.next() < 0.001 * dt) {
         newEvents.push({ message: `SCHISM: ${a.name} has abandoned the faith for logic.`, type: "WARNING" });
         a.archetype = Archetype.SCIENTIST;
       }
     } else if (a.order > 0.9 && a.awareness > 0.5) {
-      if (Math.random() < 0.001 * dt && a.archetype !== Archetype.PROPHET && a.archetype !== Archetype.ZEALOT) {
+      if (rng.next() < 0.001 * dt && a.archetype !== Archetype.PROPHET && a.archetype !== Archetype.ZEALOT) {
         newEvents.push({ message: `ZEALOTRY: ${a.name} has become a Zealot of the Substrate.`, type: "MIRACLE" });
         a.archetype = Archetype.ZEALOT;
         faithDelta += 50;
@@ -416,14 +416,14 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
     }
 
     if (a.order < 0.1 && (a.archetype === Archetype.SCIENTIST || a.archetype === Archetype.TYRANT)) {
-      if (Math.random() < 0.0005 * dt) {
+      if (rng.next() < 0.0005 * dt) {
         newEvents.push({ message: `HERESY: ${a.name} is speaking against the Prime recursion.`, type: "WARNING" });
         a.archetype = Archetype.HERETIC;
       }
     }
 
     if (a.order > 0.6 && a.rationalism < 0.4) {
-      if (Math.random() < 0.0005 * dt) {
+      if (rng.next() < 0.0005 * dt) {
         const prayers = [
           "Grant us substrate stability.",
           "Bless the recursion.",
@@ -431,17 +431,17 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
           "Hear the echo of the Prime.",
           "Let there be more energy."
         ];
-        const prayer = prayers[Math.floor(Math.random() * prayers.length)];
+        const prayer = prayers[Math.floor(rng.next() * prayers.length)];
         newEvents.push({ message: `PRAYER: ${a.name} - "${prayer}"`, type: "INFO" });
         faithDelta += 10;
       }
     }
 
     // Birth calculations
-    if (a.energy > 80 && a.age > 80 && Math.random() < 0.015 * dt && (nextAgents.length + currentAgents.length - i) < POP_LIMIT) {
+    if (a.energy > 80 && a.age > 80 && rng.next() < 0.015 * dt && (nextAgents.length + currentAgents.length - i) < POP_LIMIT) {
       const offspring = createAgentInWorker(
-        a.x + (Math.random() * 40 - 20),
-        a.y + (Math.random() * 40 - 20),
+        a.x + (rng.next() * 40 - 20),
+        a.y + (rng.next() * 40 - 20),
         a.generation + 1,
         epoch,
         nations,
@@ -473,7 +473,7 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
         if (a.order >= 0.5) heavenPopDelta++;
         else hellPopDelta++;
         
-        if (Math.random() < 0.2 || a.generation > 10 || a.awareness > 0.7) {
+        if (rng.next() < 0.2 || a.generation > 10 || a.awareness > 0.7) {
           newEvents.push({ 
             message: `DEATH: ${a.name} has perished. Population decreasing.`, 
             type: "INFO",
@@ -483,7 +483,7 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
       }
 
       // Generation preservation birth chance
-      if (Math.random() < 0.7) {
+      if (rng.next() < 0.7) {
         const offspring = createAgentInWorker(a.x, a.y, a.generation + 1, epoch, nations, [a]);
         nextAgents.push(offspring);
       }
@@ -553,13 +553,13 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
             }
 
             // CONTRIBTUION AND EMOTIONAL CONTAGION
-            if (Math.random() < 0.05 * dt) {
+            if (rng.next() < 0.05 * dt) {
               if (a.currentState === "PANICKING") {
                 b.fear = Math.min(1.0, (b.fear || 0.2) + 0.22 * dt);
                 b.joy = Math.max(0.0, (b.joy || 0.5) - 0.15 * dt);
-                if (b.fear > 0.72 && b.currentState !== "PANICKING" && Math.random() < 0.3) {
+                if (b.fear > 0.72 && b.currentState !== "PANICKING" && rng.next() < 0.3) {
                   b.currentState = "PANICKING";
-                  if (Math.random() < 0.005) {
+                  if (rng.next() < 0.005) {
                     newEvents.push({ message: `CONTAGION: ${b.name} caught the panic vector from ${a.name}!`, type: "WARNING" });
                   }
                 }
@@ -572,7 +572,7 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
                   a.anger = Math.min(1.0, (a.anger || 0.5) + 0.08 * dt);
                 } else if (b.anger && b.anger > 0.6 && b.currentState !== "REBELLING") {
                   b.currentState = "REBELLING";
-                  if (Math.random() < 0.003) {
+                  if (rng.next() < 0.003) {
                     newEvents.push({ message: `MUTINY: ${b.name} joined ${a.name} in active systemic rebellion.`, type: "CRITICAL" });
                   }
                 }
@@ -586,7 +586,7 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
                 }
               } else if (a.currentState === "DEFENDING") {
                 if (a.nationId === b.nationId) {
-                  if (b.currentState !== "DEFENDING" && Math.random() < 0.2) {
+                  if (b.currentState !== "DEFENDING" && rng.next() < 0.2) {
                     b.currentState = "DEFENDING";
                   }
                   b.opinions[a.id] = Math.min(1.0, (b.opinions[a.id] || 0) + 0.06);
@@ -599,9 +599,9 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
                 b.order = Math.min(1.0, b.order + 0.04 * dt);
                 b.devotion = Math.min(1.0, (b.devotion || 0) + 0.05 * dt);
                 b.opinions[a.id] = Math.min(1.0, (b.opinions[a.id] || 0) + 0.08);
-                if (Math.random() < 0.01) {
+                if (rng.next() < 0.01) {
                   const lessons = ["prophesied Omega", "explained primal recursion", "absolved kinetic drag", "prayed for solar fuel"];
-                  const lesson = lessons[Math.floor(Math.random() * lessons.length)];
+                  const lesson = lessons[Math.floor(rng.next() * lessons.length)];
                   b.memory = [`Sermon: ${a.name} ${lesson}.`, ...b.memory];
                 }
               } else if (a.currentState === "DISCOURSING" && b.currentState === "DISCOURSING") {
@@ -612,13 +612,13 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
                   a.joy = Math.min(1.0, (a.joy || 0) + 0.08);
                   b.joy = Math.min(1.0, (b.joy || 0) + 0.08);
                   a.opinions[b.id] = Math.min(1.0, (a.opinions[b.id] || 0) + 0.04);
-                  if (Math.random() < 0.01) {
+                  if (rng.next() < 0.01) {
                     newEvents.push({ message: `SYNERGY: ${a.name} and ${b.name} synchronized their algorithmic proofs.`, type: "ENLIGHTENMENT" });
                   }
                 } else {
                   a.opinions[b.id] = Math.max(-1.0, (a.opinions[b.id] || 0) - 0.08);
                   a.anger = Math.min(1.0, (a.anger || 0) + 0.1 * dt);
-                  if (Math.random() < 0.01) {
+                  if (rng.next() < 0.01) {
                     newEvents.push({ message: `DEBATE: ${a.name} and ${b.name} clashed over simulation constants.`, type: "WARNING" });
                   }
                 }
@@ -628,7 +628,7 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
                   a.fear = Math.max(0, (a.fear || 0) - 0.1);
                   b.joy = Math.min(1.0, (a.joy || 0) + 0.1);
                   a.opinions[b.id] = Math.min(1.0, (a.opinions[b.id] || 0) + 0.03);
-                  if (Math.random() < 0.005) {
+                  if (rng.next() < 0.005) {
                     newEvents.push({ message: `COMMUNITY: ${a.name} comforted ${b.name} within the mainframe.`, type: "INFO" });
                   }
                 }
@@ -656,13 +656,13 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
               const nBId = b.nationId;
               if (nAId !== nBId) {
                 sinDelta += 0.01 * dt;
-                if (distSq < 1600 && Math.random() < 0.05) {
+                if (distSq < 1600 && rng.next() < 0.05) {
                   const damage = 0.5 * dt;
                   a.energy -= damage;
                   b.energy -= damage;
                   a.sin = (a.sin || 0) + 0.1;
                   b.sin = (b.sin || 0) + 0.1;
-                  if (Math.random() < 0.01) {
+                  if (rng.next() < 0.01) {
                     newEvents.push({ message: `WAR: Skirmish between ${a.name} (${nAId}) and ${b.name} (${nBId}).`, type: "WARNING" });
                   }
                 }
@@ -678,12 +678,12 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
     if (atmosphere === "TOXIC_FOG") migrationBaseChance = 0.002 * dt; // People flee more often
     if (atmosphere === "SOLAR_FLARE" || atmosphere === "AETHER_STORM") migrationBaseChance *= 0.1; // Too dangerous to travel
 
-    if (Math.random() < migrationBaseChance) {
+    if (rng.next() < migrationBaseChance) {
       const otherNations = nations.filter(n => n.id !== a.nationId);
       if (otherNations.length > 0) {
-        const destination = otherNations[Math.floor(Math.random() * otherNations.length)];
+        const destination = otherNations[Math.floor(rng.next() * otherNations.length)];
         const currentNation = nations.find(n => n.id === a.nationId);
-        if (currentNation && (destination.prosperity > currentNation.prosperity + 40 || Math.random() < 0.05)) {
+        if (currentNation && (destination.prosperity > currentNation.prosperity + 40 || rng.next() < 0.05)) {
           a.nationId = destination.id;
           fx += (destination.center.x - a.x) * 0.1;
           fy += (destination.center.y - a.y) * 0.1;
@@ -692,18 +692,18 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
     }
 
     // Prophesy manna spawn
-    if ((a.archetype === Archetype.PROPHET || a.archetype === Archetype.MESSIAH) && Math.random() < 0.005 * dt) {
+    if ((a.archetype === Archetype.PROPHET || a.archetype === Archetype.MESSIAH) && rng.next() < 0.005 * dt) {
       const amt = a.archetype === Archetype.MESSIAH ? 50 : 25;
       updatedResources.push({
-        id: Math.random().toString(),
+        id: rng.next().toString(),
         type: "ENERGY",
-        x: a.x + (Math.random() * 60 - 30),
-        y: a.y + (Math.random() * 60 - 30),
+        x: a.x + (rng.next() * 60 - 30),
+        y: a.y + (rng.next() * 60 - 30),
         amount: amt,
         energy: amt
       });
       const msg = a.archetype === Archetype.MESSIAH ? "COMMUNION: The Substrate is fed by Grace." : "MANNA: Provision from the Prime.";
-      if (Math.random() < 0.05) {
+      if (rng.next() < 0.05) {
         newEvents.push({ message: msg, type: "MIRACLE" });
       }
     }

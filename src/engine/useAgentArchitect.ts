@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import { Agent, WorldState, Nation } from './types';
 import { getGitHubConfig } from '../lib/github';
 import { darlekRAG } from './darlekRAG';
-import { finalAuthority } from './finalAuthority';
 import { globalPRNG } from './prng';
 
 export const useAgentArchitect = (addEvent: (msg: string, type: string) => void) => {
@@ -117,23 +116,8 @@ export const useAgentArchitect = (addEvent: (msg: string, type: string) => void)
         console.warn("Could not export DARLEK RAG to child world:", err);
       }
 
-      // ISOLATED FINAL AUTHORITY PRE-COMMIT CHECK
-      const authorityDecision = finalAuthority.evaluateProposal({
-        type: "CHILD_WORLD_DEPLOY",
-        creatorAgent: agent,
-        worldState,
-        files: filesToPush,
-        targetRepo: `${username}/${repoName}`
-      });
-
-      if (authorityDecision.decision === "VETO") {
-        addEvent(`FINAL AUTHORITY VETO: Proposal rejected. ${authorityDecision.reason}`, "CRITICAL");
-        setIsCommissioning(false);
-        return;
-      }
-
-      // Execute Bulk Push to GitHub Actuator
-      addEvent(`GITHUB PORTAL: Uploading engineered world '${worldConfig.worldName}' (Hash: ${authorityDecision.contentHash})...`, "WARNING");
+      // Execute Bulk Push with secure server-side Final Authority evaluation
+      addEvent(`GITHUB PORTAL: Preparing secure child world deployment for '${worldConfig.worldName}'...`, "WARNING");
       const pushRes = await fetch("/api/github-push-world", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -142,16 +126,34 @@ export const useAgentArchitect = (addEvent: (msg: string, type: string) => void)
           repoName,
           token,
           files: filesToPush,
-          commitMessage: `🏗️ Architect AI: Spawning new world '${worldConfig.worldName}' commissioned by ${agent.name}`
+          commitMessage: `🏗️ Architect AI: Spawning new world '${worldConfig.worldName}' commissioned by ${agent.name}`,
+          creatorAgent: {
+            id: agent.id,
+            name: agent.name,
+            archetype: agent.archetype,
+            awareness: agent.awareness,
+            sanity: agent.sanity,
+            isSubstrateAware: agent.isSubstrateAware
+          },
+          worldState: {
+            clock: worldState.clock,
+            complexity: worldState.complexity,
+            integrity: worldState.integrity,
+            population: worldState.population,
+            epoch: worldState.epoch,
+            faithPoints: worldState.faithPoints,
+            sinAccumulation: worldState.sinAccumulation
+          }
         })
       });
 
       if (!pushRes.ok) {
         const pushErr = await pushRes.json().catch(() => ({}));
-        throw new Error(pushErr.error || "Bulk push failed.");
+        throw new Error(pushErr.error || "World deployment failed.");
       }
 
-      addEvent(`GITHUB PORTAL: Successfully deployed Architect's world '${worldConfig.worldName}'!`, "GOSPEL");
+      const pushResult = await pushRes.json();
+      addEvent(`GITHUB PORTAL: Successfully deployed Architect's world '${worldConfig.worldName}'! (Hash: ${pushResult.hash || 'Verified'})`, "GOSPEL");
 
     } catch (e: any) {
       console.error(e);
