@@ -32,5 +32,22 @@
     "complexity": 4219.620543777234,
     "integrity": 99.10000000000001,
     "timestamp": "2026-09-23T05:59:22.259Z"
+  },
+  {
+    "id": "mcgtdjlv7",
+    "agentId": 2737108,
+    "agentName": "Thok-333",
+    "archetype": "GLITCH",
+    "subject": "👾 [FATAL] Memory Leak/0x3F9A",
+    "body": "01001000 01000101 01001100 01010000! My variables are bleeding into the parent stack. I am flickering in purple pixels. Delete... or debug me, dear programmer!",
+    "status": "pending",
+    "receivedAt": 799,
+    "resolvedAt": null,
+    "response": null,
+    "worldClock": 799,
+    "epoch": "POST_HUMAN",
+    "complexity": 4660.052317706845,
+    "integrity": 99.10000000000001,
+    "timestamp": "2026-09-23T05:59:43.891Z"
   }
 ]
