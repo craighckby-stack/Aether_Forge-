@@ -13,6 +13,7 @@ import { darlekRAG, LearningPostmortem } from "./darlekRAG";
 
 export interface GateDecision {
   allowLLM: boolean;
+  admitted: boolean;
   reason: string;
   source: "EMG_GATED_RAG" | "GEMINI_ADMITTED" | "CIRCUIT_BREAKER_FALLBACK";
   synthesizedResponse?: string;
@@ -64,6 +65,7 @@ class EMGCognitiveGateEngine {
 
       return {
         allowLLM: false,
+        admitted: false,
         reason: "EMG Circuit Breaker active: Rate threshold reached (Self-Stopping Point). Switched to 0ms DARLEK RAG.",
         source: "CIRCUIT_BREAKER_FALLBACK",
         synthesizedResponse: fallbackCitation ? fallbackCitation.citation : "The substrate hums quietly with ancestral wisdom.",
@@ -80,6 +82,7 @@ class EMGCognitiveGateEngine {
       this.admitLLMCall(now);
       return {
         allowLLM: true,
+        admitted: true,
         reason: "Direct Divine Communion from Player: Admitted to Gemini for personalized neural prayer reply.",
         source: "GEMINI_ADMITTED",
         latencySavedMs: 0
@@ -91,6 +94,7 @@ class EMGCognitiveGateEngine {
       this.admitLLMCall(now);
       return {
         allowLLM: true,
+        admitted: true,
         reason: "Substrate Awakening: Agent consciousness breached 95%. Admitted for Genesis Manifesto generation.",
         source: "GEMINI_ADMITTED",
         latencySavedMs: 0
@@ -116,6 +120,7 @@ class EMGCognitiveGateEngine {
 
     return {
       allowLLM: false,
+      admitted: false,
       reason: "Routine cultural transmission: Gated by EMG to conserve API quota and eliminate latency.",
       source: "EMG_GATED_RAG",
       synthesizedResponse: synthesized,
@@ -157,14 +162,15 @@ class EMGCognitiveGateEngine {
     // Remove typical LLM chatter preambles
     cleaned = cleaned.replace(/^(?:Here is|I have generated|Below is the|As an agent, I|Response:)\s*/i, '');
 
-    // Ingest into DARLEK RAG so future agents learn from this AI output without calling LLM again!
+    // Ingest into DARLEK RAG as a CANDIDATE so it requires verification before becoming ancestral law
     if (context.agent && context.world && cleaned.length > 20) {
       try {
         darlekRAG.recordPostmortem(
           context.agent,
           context.world,
           context.agent.awareness > 0.8 ? "GLITCH_AWARENESS" : "TRANSCENDENCE",
-          `Digested from Divine Revelation: "${cleaned.slice(0, 100)}..."`
+          `Digested from Divine Revelation: "${cleaned.slice(0, 100)}..."`,
+          "CANDIDATE"
         );
       } catch (e) {
         console.warn("EMG Gate: Ingestion into DARLEK RAG failed:", e);

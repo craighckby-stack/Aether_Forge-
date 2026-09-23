@@ -21,6 +21,7 @@ export interface LearningPostmortem {
   constraint: string;
   ancestralScripture: string;
   category: "survival" | "theological" | "glitch_awareness" | "societal" | "eschatological";
+  status?: "CANDIDATE" | "VERIFIED" | "REJECTED" | "INHERITED";
 }
 
 export interface MutationMemory {
@@ -172,7 +173,8 @@ class DarlekRAGEngine {
     agent: any,
     world: any,
     cause: "STARVATION" | "SANITY_COLLAPSE" | "WAR_CASUALTY" | "GLITCH_AWARENESS" | "DIVINE_SMITE" | "TRANSCENDENCE" | "OLD_AGE",
-    extraContext?: string
+    extraContext?: string,
+    status: "CANDIDATE" | "VERIFIED" = "VERIFIED"
   ): LearningPostmortem {
     const epochName = world.epoch || "PRIMAL";
     const worldId = world.id || "prime-resonance";
@@ -257,7 +259,8 @@ class DarlekRAGEngine {
       evidence,
       constraint,
       ancestralScripture: scripture,
-      category
+      category,
+      status
     };
 
     this.postmortems.unshift(postmortem);
@@ -271,7 +274,7 @@ class DarlekRAGEngine {
 
   /**
    * Retrieve relevant ancestral postmortems and wisdom without calling an LLM.
-   * Runs in 0ms synchronously.
+   * Runs in local memory synchronously (<1ms).
    */
   public queryAncestralWisdom(options: {
     archetype?: string;
@@ -279,11 +282,14 @@ class DarlekRAGEngine {
     minAwareness?: number;
     keyword?: string;
     limit?: number;
+    includeCandidates?: boolean;
   }): LearningPostmortem[] {
     this.totalQueriesServed++;
     const limit = options.limit || 3;
 
-    let filtered = [...this.postmortems];
+    let filtered = this.postmortems.filter(p =>
+      options.includeCandidates ? p.status !== "REJECTED" : (p.status === "VERIFIED" || p.status === "INHERITED" || !p.status)
+    );
 
     if (options.category) {
       filtered = filtered.filter(p => p.category === options.category);
@@ -304,7 +310,14 @@ class DarlekRAGEngine {
       if (kwMatches.length > 0) filtered = kwMatches;
     }
 
-    // Shuffle slightly to give variety while preserving top matches
+    // Deterministic ranking: Sort by generational lineage descending, then timestamp
+    filtered.sort((a, b) => {
+      if ((b.generation || 0) !== (a.generation || 0)) {
+        return (b.generation || 0) - (a.generation || 0);
+      }
+      return b.timestamp.localeCompare(a.timestamp);
+    });
+
     return filtered.slice(0, limit);
   }
 
@@ -336,7 +349,8 @@ class DarlekRAGEngine {
       limit: 3
     });
 
-    const pm = matches.length > 0 ? matches[Math.floor(Math.random() * matches.length)] : null;
+    // Deterministic selection: Pick top ranked match
+    const pm = matches.length > 0 ? matches[0] : null;
 
     if (!pm) {
       return {

@@ -80,13 +80,18 @@ export const useAgentArchitect = (addEvent: (msg: string, type: string) => void)
             id: childWorldId,
             name: worldConfig.worldName,
             manifesto: worldConfig.manifesto,
-            chaosLevel: worldConfig.chaosLevel,
+            creator: agent.name,
             creatorAgentId: agent.id,
             creatorAgentName: agent.name,
+            epoch: "PRIMAL",
+            complexityBoost: worldConfig.chaosLevel ? Math.max(1, Math.round(worldConfig.chaosLevel * 10)) : 10,
+            chaosLevel: worldConfig.chaosLevel || 1.0,
             physics: worldConfig.physics,
+            startingNations: generatedNations,
             nations: generatedNations,
-            inhabitants: [] 
-           };
+            seed: Math.random(),
+            inhabitants: []
+          };
           
           fileContent = fileContent.replace(/export const WORLD_MATRIX: any = null;/g, `export const WORLD_MATRIX: any = ${JSON.stringify(worldMatrixObj, null, 2)};`);
           fileContent = fileContent.replace(/selectedWorldId: string = "prime-resonance"/g, `selectedWorldId: string = "${childWorldId}"`);

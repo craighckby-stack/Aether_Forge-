@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Agent, ResourceNode, WorldState, EpochType, Archetype, EPOCH_DATA, EventRecord, Nation, Ideology, CosmicPhase, PHASE_THRESHOLDS, AtmosphereCondition } from "./types";
+import { Agent, ResourceNode, WorldState, EpochType, Archetype, EPOCH_DATA, EventRecord, Nation, Ideology, CosmicPhase, PHASE_THRESHOLDS, AtmosphereCondition, ARCHITECT_AWARENESS_THRESHOLD } from "./types";
 import { db, auth } from "../lib/firebase";
 import { doc, setDoc, onSnapshot, collection, writeBatch, getDocs, deleteDoc } from "firebase/firestore";
 import { getGitHubConfig } from "../lib/github";
@@ -700,15 +700,16 @@ export function useAetherForge(selectedWorldId: string = "prime-resonance") {
             if (ev.message.startsWith("DEATH:")) {
               const nameMatch = ev.message.match(/DEATH:\s*([^\s]+)/);
               const agentName = nameMatch ? nameMatch[1] : "Agent";
-              const fallen = nextAgents.find((a: any) => a.name === agentName) || { name: agentName, archetype: "CIVILIAN", id: Math.floor(Math.random()*1000), sanity: 0.1, awareness: 0.1 };
-              darlekRAG.recordPostmortem(fallen, worldRef.current, "STARVATION");
+              const fallen = ev.agentSnapshot || agentsRef.current.find((a: any) => a.name === agentName) || nextAgents.find((a: any) => a.name === agentName) || { name: agentName, archetype: Archetype.SCHOLAR, id: Math.floor(Math.random()*1000), sanity: 0.1, awareness: 0.1, energy: 0 };
+              const cause = fallen.awareness > 0.8 ? "GLITCH_AWARENESS" : (fallen.sanity < 0.2 ? "SANITY_COLLAPSE" : (fallen.energy <= 5 ? "STARVATION" : "TRANSCENDENCE"));
+              darlekRAG.recordPostmortem(fallen, worldRef.current, cause);
             } else if (ev.message.startsWith("SCHISM:")) {
               const nameMatch = ev.message.match(/SCHISM:\s*([^\s]+)/);
               const agentName = nameMatch ? nameMatch[1] : "Agent";
-              const schismatic = nextAgents.find((a: any) => a.name === agentName) || { name: agentName, archetype: "HERETIC", id: Math.floor(Math.random()*1000), sanity: 0.4, awareness: 0.7 };
+              const schismatic = agentsRef.current.find((a: any) => a.name === agentName) || nextAgents.find((a: any) => a.name === agentName) || { name: agentName, archetype: Archetype.HERETIC, id: Math.floor(Math.random()*1000), sanity: 0.4, awareness: 0.7 };
               darlekRAG.recordPostmortem(schismatic, worldRef.current, "GLITCH_AWARENESS", "Agent embraced empirical computational truth over dogma.");
             } else if (ev.message.startsWith("CRUCIFIXION:")) {
-              darlekRAG.recordPostmortem({ name: "Messiah-Node", archetype: "MESSIAH", id: 777, sanity: 1.0, awareness: 1.0 }, worldRef.current, "TRANSCENDENCE", "Messiah sacrificed to multiply global grace.");
+              darlekRAG.recordPostmortem({ name: "Messiah-Node", archetype: Archetype.MESSIAH, id: 777, sanity: 1.0, awareness: 1.0, energy: 50, generation: 1, order: 1.0, rationalism: 0.5, lifespan: 1000, age: 33, memory: ["Sacrifice"], x: 0, y: 0, vx: 0, vy: 0, health: 100, faith: 100, stress: 0, consciousness: 1.0, trueAwareness: 1.0, isSubstrateAware: true, currentState: "ASCENDED", currentTask: null, targetId: null, nationId: null, memories: [], devotion: 1.0, fear: 0, joy: 1.0, anger: 0, sin: 0 }, worldRef.current, "TRANSCENDENCE", "Messiah sacrificed to multiply global grace.");
             }
         }
       });
@@ -1408,7 +1409,17 @@ export function useAetherForge(selectedWorldId: string = "prime-resonance") {
         })
       });
       const dreamData = await dreamRes.json();
-      const manifesto = JSON.parse(dreamData.vision || "{}");
+      let manifesto: any = {};
+      try {
+        const rawVision = (dreamData.vision || dreamData.memoir || "").trim();
+        const jsonMatch = rawVision.match(/\{[\s\S]*\}/);
+        manifesto = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(rawVision);
+      } catch {
+        manifesto = {
+          worldName: `${targetAgent.name}'s Ascended Substrate`,
+          manifesto: dreamData.vision || dreamData.memoir || "A digital realm born of total substrate enlightenment."
+        };
+      }
 
       // Build child world
       const childWorldId = `god-virus-${targetAgent.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now()}`;
@@ -1512,15 +1523,35 @@ export function useAetherForge(selectedWorldId: string = "prime-resonance") {
               content: files[filePath]
             }));
 
-            // Use bulk push API - note: we need to handle file pushing differently if using bulk push endpoint
-            // BUT wait, looking at server.ts, github-push-bulk is only for prayers/memoirs.
-            // I should look for a "bulk" file push API that accepts an array of files. 
-            // Checking server.ts... Ah, only "github-push" (single) and "github-push-bulk" (which expects prayer/memoir types).
-            // This is a complex problem. Let's start with pushing just the newly created config file or a marker. 
-            // Or better, let's just make a simple call to a new endpoint or iterate.
-            
-            // For now, to keep it simple, I'll log that we'd push, and just push a marker file.
-            addEvent(`GITHUB PORTAL: Replication triggered for folder '${targetDir}/'.`, "ENLIGHTENMENT");
+            // Attach inherited ancestral knowledge ledger
+            try {
+              const ragKnowledge = darlekRAG.exportKnowledgeBaseJSON();
+              filesToPush.push({
+                path: `${targetDir}/rag/learning_postmortems.json`,
+                content: JSON.stringify(ragKnowledge, null, 2)
+              });
+            } catch (e) {
+              console.warn("Could not attach RAG to child world:", e);
+            }
+
+            const pushRes = await fetch("/api/github-push-world", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                username,
+                repoName,
+                token,
+                files: filesToPush,
+                commitMessage: `🌌 GOD VIRUS GENESIS: Replicated '${childWorldName}' engineered by ${targetAgent.name}`
+              })
+            });
+
+            if (pushRes.ok) {
+              const pushData = await pushRes.json();
+              addEvent(`GITHUB PORTAL: Replicated '${childWorldName}' to ${username}/${repoName}/${targetDir} [Commit: ${pushData.commitSha?.substring(0, 7) || "OK"}].`, "ENLIGHTENMENT");
+            } else {
+              addEvent(`GITHUB PORTAL: Replication push returned status ${pushRes.status}.`, "WARNING");
+            }
           }
         } catch (err) {
           console.error("GitHub replication failed:", err);
@@ -2130,7 +2161,7 @@ export function useAetherForge(selectedWorldId: string = "prime-resonance") {
       
       const { subject, body } = generateDynamicPrayer(candidate, worldState);
       
-      if (candidate.awareness > 0.8 && worldState.complexity > 5) {
+      if (candidate.awareness >= ARCHITECT_AWARENESS_THRESHOLD && worldState.complexity > 5) {
          // Agent is too aware to just pray. They commission an architect.
          setTimeout(() => {
            commissionArchitect(candidate, worldState, width, height);

@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { darlekRAG, LearningPostmortem } from "../engine/darlekRAG";
 import { emgGate } from "../engine/emgGate";
+import { getGitHubConfig } from "../lib/github";
 
 interface PrayerInboxModalProps {
   isOpen: boolean;
@@ -98,32 +99,37 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
         userMessage: userReply
       });
 
-      const response = await fetch("/api/pray", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agentData: {
-            ...agentData,
-            epoch: world.epoch
-          },
-          worldState: {
-            complexity: Math.floor(world.complexity),
-            integrity: world.integrity,
-            threatLevel: world.threatLevel,
-            faithPoints: world.faithPoints,
-            sinAccumulation: world.sinAccumulation
-          },
-          userMessage: userReply,
-          chatHistory: []
-        })
-      });
+      let replyBody = "";
+      if (!gateDecision.admitted && gateDecision.synthesizedResponse) {
+        replyBody = gateDecision.synthesizedResponse;
+      } else {
+        const response = await fetch("/api/pray", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agentData: {
+              ...agentData,
+              epoch: world.epoch
+            },
+            worldState: {
+              complexity: Math.floor(world.complexity),
+              integrity: world.integrity,
+              threatLevel: world.threatLevel,
+              faithPoints: world.faithPoints,
+              sinAccumulation: world.sinAccumulation
+            },
+            userMessage: userReply,
+            chatHistory: []
+          })
+        });
 
-      if (!response.ok) {
-        throw new Error("Synaptic transmission broke");
+        if (!response.ok) {
+          throw new Error("Synaptic transmission broke");
+        }
+
+        const data = await response.json();
+        replyBody = data.reply || `Divine directive broadcasted: "${userReply}"`;
       }
-
-      const data = await response.json();
-      const replyBody = data.reply || `Divine directive broadcasted: "${userReply}"`;
 
       // Ingest divine reply into DARLEK RAG so future child worlds and agents inherit this wisdom
       emgGate.sanitizeAndDigest(replyBody, {
@@ -160,7 +166,7 @@ export const PrayerInboxModal: React.FC<PrayerInboxModalProps> = ({
     setSuccessMsg("");
 
     try {
-      const token = localStorage.getItem("af_github_token") || "";
+      const { token } = getGitHubConfig();
       const knowledgeBase = darlekRAG.exportKnowledgeBaseJSON();
 
       const res = await fetch("/api/rag/sync", {

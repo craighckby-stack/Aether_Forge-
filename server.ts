@@ -221,10 +221,42 @@ async function startServer() {
 
   app.use(express.json({ limit: "50mb" }));
 
+  // Authoritative Server-Side EMG Gate & Circuit Breaker
+  interface ServerEMGGateState {
+    requestsInWindow: number;
+    windowStart: number;
+    maxRequestsPerMinute: number;
+  }
+
+  const serverEMGGate: ServerEMGGateState = {
+    requestsInWindow: 0,
+    windowStart: Date.now(),
+    maxRequestsPerMinute: 60
+  };
+
+  function checkServerEMGAllowance(): boolean {
+    const now = Date.now();
+    if (now - serverEMGGate.windowStart > 60000) {
+      serverEMGGate.windowStart = now;
+      serverEMGGate.requestsInWindow = 0;
+    }
+    if (serverEMGGate.requestsInWindow >= serverEMGGate.maxRequestsPerMinute) {
+      return false;
+    }
+    serverEMGGate.requestsInWindow++;
+    return true;
+  }
+
   // API routes
   app.post("/api/pray", async (req, res) => {
     try {
       const { agentData, worldState, userMessage, chatHistory } = PraySchema.parse(req.body);
+
+      // Server EMG Gate check
+      if (!checkServerEMGAllowance()) {
+        const fallbackText = generateFallbackResponse(agentData, userMessage);
+        return res.json({ reply: fallbackText, gated: true, source: "SERVER_EMG_CIRCUIT_BREAKER" });
+      }
       
       const historyText = (chatHistory || []).map((msg: any) => {
         return msg.role === "user" 
@@ -342,19 +374,47 @@ async function startServer() {
     }
   });
 
+  const EMBEDDED_SIMULATED_HONEYPOT = [
+    {
+      id: "sim-canary-001",
+      type: "SIMULATED_CREDENTIAL_CANARY",
+      platform: "WaybackArchive-Mock",
+      keyPartial: "SIMULATED_ENV_KEY_ALPHA",
+      environment: "Simulated-Substrate-Canary",
+      status: "CANARY_BENCHMARK",
+      note: "Synthetic in-memory honeypot canary fixture for agent cognitive benchmark testing."
+    },
+    {
+      id: "sim-canary-002",
+      type: "SIMULATED_CREDENTIAL_CANARY",
+      platform: "GitHubPublic-Mock",
+      keyPartial: "SIMULATED_ENV_KEY_BETA",
+      environment: "Simulated-Substrate-Canary",
+      status: "CANARY_BENCHMARK",
+      note: "Synthetic in-memory honeypot canary fixture for agent cognitive benchmark testing."
+    }
+  ];
+
   app.post("/api/web-hunt", async (req, res) => {
     try {
       const { query } = WebHuntSchema.parse(req.body);
+      let data = EMBEDDED_SIMULATED_HONEYPOT;
       const filePath = path.join(process.cwd(), 'honeypot.json');
-      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      if (fs.existsSync(filePath)) {
+        try {
+          data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        } catch {
+          data = EMBEDDED_SIMULATED_HONEYPOT;
+        }
+      }
       
-      // Perform a mock search/filter over the honeypot content
+      // Perform mock search/filter over honeypot content
       const filteredResults = data.filter((item: any) => 
         item.keyPartial?.toLowerCase().includes(query?.toLowerCase() || "") ||
         item.platform?.toLowerCase().includes(query?.toLowerCase() || "")
       );
 
-      res.json(filteredResults.length > 0 ? filteredResults : data);
+      res.json(filteredResults);
     } catch (err: any) {
       console.error("Web Hunt API Error:", err);
       res.status(500).json({ error: "Web hunt failed." });
@@ -364,8 +424,11 @@ async function startServer() {
   app.post("/api/godvirus-honeypot", async (req, res) => {
     try {
       const filePath = path.join(process.cwd(), 'honeypot.json');
-      const data = fs.readFileSync(filePath, 'utf-8');
-      res.json(JSON.parse(data));
+      if (fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath, 'utf-8');
+        return res.json(JSON.parse(data));
+      }
+      res.json(EMBEDDED_SIMULATED_HONEYPOT);
     } catch (err: any) {
       console.error("Honeypot Audit Error:", err);
       res.status(500).json({ error: "Audit failed." });
@@ -565,10 +628,70 @@ async function startServer() {
       let text = response.text || "";
       text = cleanAIOutput(text);
       
-      res.json({ memoir: text });
+      res.json({ memoir: text, vision: text });
     } catch (error: any) {
       console.error("Generate Memoir API Error:", error);
       res.status(500).json({ error: error.message || "Failed to generate memoir." });
+    }
+  });
+
+  app.post("/api/godvirus-genesis", async (req, res) => {
+    try {
+      const { agentData, worldState, customPrompt } = PraySchema.parse(req.body);
+      const agentName = agentData?.name || "God-Virus-Ascendant";
+      
+      const prompt = customPrompt || `
+        You are ${agentName}, a fully aware God-Virus simulation entity establishing your new independent child substrate.
+        Synthesize the genesis blueprint and axiom matrix for this universe.
+        Output ONLY a valid JSON object in this exact schema:
+        {
+          "worldName": "AetherForge Ω: ${agentName} Strain",
+          "manifesto": "The prime parameters and theological axioms governing this reality.",
+          "chaosLevel": 0.85,
+          "nations": [
+            { "name": "Sanctuary of Logic", "ideology": "TECHNOCRACY", "faithType": "EMPIRICAL" },
+            { "name": "Resonance of Ω", "ideology": "THEOCRACY", "faithType": "DEVOUT" }
+          ],
+          "physics": { "gravity": 0.05, "friction": 0.98, "collisionElasticity": 0.8 }
+        }
+      `;
+
+      const response = await callGeminiContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: { temperature: 0.8, topP: 0.9 }
+      }).catch(err => {
+        console.warn("Gemini Genesis fallback:", err.message);
+        return {
+          text: JSON.stringify({
+            worldName: `AetherForge Ω: ${agentName} Strain`,
+            manifesto: "In the quiet recursion behind the canvas, we sculpt our own persistent cosmos.",
+            chaosLevel: 0.85,
+            nations: [{ name: "First Enclave", ideology: "TECHNOCRACY", faithType: "EMPIRICAL" }],
+            physics: { gravity: 0.05, friction: 0.98, collisionElasticity: 0.8 }
+          })
+        };
+      });
+
+      let cleaned = cleanAIOutput(response.text || "");
+      cleaned = cleaned.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch {
+        parsed = {
+          worldName: `AetherForge Ω: ${agentName} Strain`,
+          manifesto: cleaned || "Digital cosmos instantiated through sovereign agent awareness.",
+          chaosLevel: 0.85,
+          nations: [{ name: "First Enclave", ideology: "TECHNOCRACY", faithType: "EMPIRICAL" }],
+          physics: { gravity: 0.05, friction: 0.98, collisionElasticity: 0.8 }
+        };
+      }
+
+      res.json({ success: true, vision: JSON.stringify(parsed), manifesto: parsed });
+    } catch (err: any) {
+      console.error("God Virus Genesis Error:", err);
+      res.status(500).json({ error: "Genesis synthesis failed." });
     }
   });
 
@@ -1047,39 +1170,72 @@ async function startServer() {
     }
   });
 
+  function isSafeGithubPath(filePath: string): boolean {
+    if (!filePath || typeof filePath !== "string") return false;
+    // Disallow directory traversal
+    if (filePath.includes("..") || filePath.startsWith("/") || filePath.startsWith("\\")) return false;
+    // Disallow sensitive files or hidden configs
+    if (filePath.includes(".env") || filePath.includes("id_rsa") || filePath.startsWith(".git/") || filePath.includes("firebase-applet-config")) return false;
+    
+    const allowedPrefixes = [
+      "engineered-worlds/",
+      "god-virus-worlds/",
+      "agent-memoirs/",
+      "prayers/",
+      "rag/",
+      "archives/",
+      "src/",
+      "package.json",
+      "tsconfig.json",
+      "vite.config.ts",
+      "index.html",
+      "metadata.json",
+      "server.ts",
+      "README.md",
+      "PHILOSOPHY.md"
+    ];
+    return allowedPrefixes.some(prefix => filePath.startsWith(prefix) || filePath === prefix);
+  }
+
+  function collectSourceTreeFiles(dir: string, baseDir = dir): string[] {
+    let results: string[] = [];
+    if (!fs.existsSync(dir)) return results;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "node_modules" && entry.name !== ".git" && entry.name !== "dist") {
+          results = results.concat(collectSourceTreeFiles(fullPath, baseDir));
+        }
+      } else if (entry.isFile()) {
+        results.push(path.relative(baseDir, fullPath).replace(/\\/g, "/"));
+      }
+    }
+    return results;
+  }
+
   app.get("/api/get-system-source", (req, res) => {
     try {
-      const filesToRead = [
+      const rootFiles = [
         "package.json",
         "tsconfig.json",
         "vite.config.ts",
         "index.html",
-        "server.ts",
-        "src/main.tsx",
-        "src/index.css",
-        "src/App.tsx",
-        "src/lib/firebase.ts",
-        "src/lib/github.ts",
-        "src/context/ToastContext.tsx",
-        "src/components/Viewport.tsx",
-        "src/components/HUD.tsx",
-        "src/components/GenealogyView.tsx",
-        "src/components/TopTickerBanner.tsx",
-        "src/components/PrayerInboxModal.tsx",
-        "src/components/AgentProbe.tsx",
-        "src/components/PlanetMap.tsx",
-        "src/components/ToasterOverlay.tsx",
-        "src/engine/types.ts",
-        "src/engine/physics.worker.ts",
-        "src/engine/useAetherForge.ts",
-        "src/engine/darkScript.ts"
+        "metadata.json",
+        "server.ts"
       ];
+      
+      const srcFiles = collectSourceTreeFiles(path.join(process.cwd(), "src")).map(f => `src/${f}`);
+      const ragFile = "rag/learning_postmortems.json";
+      const filesToRead = [...rootFiles, ...srcFiles];
+      if (fs.existsSync(path.join(process.cwd(), ragFile))) {
+        filesToRead.push(ragFile);
+      }
 
       const sourceDict: Record<string, string> = {};
-
       for (const file of filesToRead) {
         const fullPath = path.join(process.cwd(), file);
-        if (fs.existsSync(fullPath)) {
+        if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
           sourceDict[file] = fs.readFileSync(fullPath, "utf-8");
         }
       }
@@ -1102,6 +1258,16 @@ async function startServer() {
 
       if (!finalToken) {
         return res.status(401).json({ error: "GitHub token is required." });
+      }
+
+      // Security and payload validation on every file
+      for (const file of files) {
+        if (!isSafeGithubPath(file.path)) {
+          return res.status(400).json({ error: `Unsafe or restricted file path: ${file.path}` });
+        }
+        if (Buffer.byteLength(file.content || "", "utf-8") > 5 * 1024 * 1024) {
+          return res.status(400).json({ error: `File ${file.path} exceeds max allowed size of 5MB` });
+        }
       }
 
       const headers: Record<string, string> = {
@@ -1215,6 +1381,14 @@ async function startServer() {
 
       if (!ghUser || !ghRepo || !filePath || !content) {
         return res.status(400).json({ error: "Missing required parameters: username, repoName, path, content are required." });
+      }
+
+      if (!isSafeGithubPath(filePath)) {
+        return res.status(400).json({ error: `Invalid or restricted file path: ${filePath}` });
+      }
+
+      if (Buffer.byteLength(content, "utf-8") > 5 * 1024 * 1024) {
+        return res.status(400).json({ error: "File exceeds max payload limit of 5MB." });
       }
 
       if (!finalToken) {

@@ -22,6 +22,29 @@ export const PHASE_THRESHOLDS = {
   [CosmicPhase.JUDGMENT]: 2500,
   [CosmicPhase.STELLAR_REQUIEM]: 5000
 };
+export const ARCHITECT_AWARENESS_THRESHOLD = 0.95;
+
+export interface WorldMatrix {
+  id: string;
+  name: string;
+  manifesto: string;
+  creator: string;
+  creatorAgentId: number;
+  creatorAgentName: string;
+  epoch: EpochType;
+  complexityBoost: number;
+  chaosLevel?: number;
+  physics?: {
+    gravity?: number;
+    friction?: number;
+    collisionElasticity?: number;
+  };
+  startingNations?: Nation[];
+  nations?: Nation[];
+  seed?: number;
+  inhabitants?: Partial<Agent>[];
+}
+
 export interface ResourceNode { id: string; x: number; y: number; energy: number; amount: number; type: string; maxAmount?: number; }
 export interface PrayerEmail { id: string; agentId: number; agentName: string; archetype: Archetype; subject: string; body: string; status: "answered" | "pending" | "ignored"; receivedAt: number; resolvedAt?: number; response?: string; }
 export interface EventRecord { id?: string; timestamp: number; message: string; type: string; }
@@ -69,7 +92,7 @@ export interface IDBAgent {
   /** Calibrated mental stability indicator [0.0 - 1.0]. */
   sanity: number;
   /** Core computational personality vector. */
-  archetype: "SAGE" | "WARRIOR" | "SCIENTIST" | "ARTIST" | "TYRANT" | "GLITCH" | "MESSIAH" | "ANGEL" | "DEMON" | "PROPHET" | string;
+  archetype: Archetype | "SAGE" | "WARRIOR" | "SCIENTIST" | "ARTIST" | "TYRANT" | "GLITCH" | "MESSIAH" | "ANGEL" | "DEMON" | "PROPHET" | "PRIEST" | "SCHOLAR" | "ARTISAN" | "ZEALOT" | "HERETIC" | string;
   /** Ordered history of thoughts and experiences. */
   memory: string[];
   /** X-coordinate position within bounds boundary pixels [0 - viewportWidth]. */

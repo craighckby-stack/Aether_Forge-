@@ -181,7 +181,7 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
 
   const nextAgents: Agent[] = [];
   const updatedResources: ResourceNode[] = [...resources];
-  const newEvents: { message: string, type: string }[] = [];
+  const newEvents: { message: string, type: string, agentSnapshot?: any }[] = [];
   
   let faithDelta = 0;
   let sinDelta = 0;
@@ -453,7 +453,11 @@ self.onmessage = (e: MessageEvent<PhysicsWorkerInput>) => {
         else hellPopDelta++;
         
         if (Math.random() < 0.2 || a.generation > 10 || a.awareness > 0.7) {
-          newEvents.push({ message: `DEATH: ${a.name} has perished. Population decreasing.`, type: "INFO" });
+          newEvents.push({ 
+            message: `DEATH: ${a.name} has perished. Population decreasing.`, 
+            type: "INFO",
+            agentSnapshot: { ...a }
+          });
         }
       }
 
