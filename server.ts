@@ -319,8 +319,8 @@ async function startServer() {
       for (let i = 0; i < numKeysToFind; i++) {
         const platform = Math.random() < 0.5 ? "Gemini" : (Math.random() < 0.5 ? "OpenAI" : "Firebase");
         const fakeKey = platform === "Gemini" 
-          ? `AIzaSy${Math.random().toString(36).substring(2, 15)}...` 
-          : (platform === "OpenAI" ? `sk-${Math.random().toString(36).substring(2, 10)}...` : `ya29.a0A${Math.random().toString(36).substring(2, 12)}...`);
+          ? `MOCK_GEMINI_SUBSTRATE_${Math.random().toString(36).substring(2, 12)}...` 
+          : (platform === "OpenAI" ? `MOCK_OPENAI_SUBSTRATE_${Math.random().toString(36).substring(2, 10)}...` : `MOCK_FIREBASE_TOKEN_${Math.random().toString(36).substring(2, 12)}...`);
         const source = huntTargets[Math.floor(Math.random() * huntTargets.length)];
         const strength = platform === "Gemini" ? "High" : (platform === "OpenAI" ? "Medium" : "Persistence");
         const type = Math.random() < 0.3 ? "Wayback Machine Archival" : "Live Web";
