@@ -1,12 +1,19 @@
+export interface RealtimeConnectionConfig {
+  readonly url: string;
+  readonly autoReconnect?: boolean;
+}
+
+export type EventPayload = Readonly<Record<string, unknown>>;
+
 export class RealtimeCollaboration {
-  private sockets: any[] = [];
-  
-  connect(url: string) {
-    console.log(`[Realtime] Connecting to ${url}`);
+  private readonly sockets: readonly unknown[] = [];
+
+  public connect(url: string): void {
+    console.info(`[Realtime] Establishing secure connection to destination: ${url}`);
   }
 
-  broadcast(event: string, payload: any) {
-    console.log(`[Realtime] Broadcasting ${event}:`, payload);
+  public broadcast(event: string, payload: EventPayload): void {
+    console.info(`[Realtime] Broadcasting event '${event}' with payload:`, payload);
   }
 }
 
