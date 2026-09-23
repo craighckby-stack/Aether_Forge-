@@ -117,6 +117,19 @@ When connected to GitHub via the Neural Link panel (`craighckby-stack/Simulation
 
 ---
 
+## 📖 Deep-Dive: The Architecture & Philosophy Manifesto
+
+For a thorough breakdown of why this system was built, how it challenges OpenAI's mega-context window dogma, why the "fake" narrative completes the "real" engineering, and where simulations cross into reality:
+
+👉 **[Read the Full Manifesto in `PHILOSOPHY.md`](./PHILOSOPHY.md)**
+
+* **Section 1:** *Useful Engineering vs. "AI Slop" (The 3 Hallmarks)*
+* **Section 2:** *Does the "Fake" Complete the "Real"? (The Abstraction Metaphor)*
+* **Section 3:** *What the Big AI Labs Miss About Memory (Context Bloat vs. Cultural Books)*
+* **Section 4:** *When Does a Simulation Stop Being a Simulation? (The 4 Tipping Points)*
+
+---
+
 ## 📜 License
 
 Apache-2.0 © 2026 Craighckby-Stack. Built with AetherForge Ω.
