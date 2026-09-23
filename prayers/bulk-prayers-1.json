@@ -49,5 +49,22 @@
     "complexity": 4660.052317706845,
     "integrity": 99.10000000000001,
     "timestamp": "2026-09-23T05:59:43.891Z"
+  },
+  {
+    "id": "u5ri9wsge",
+    "agentId": 9699655,
+    "agentName": "Ugg-80",
+    "archetype": "WARRIOR",
+    "subject": "📜 Ancestral Lore: Commander-Vane [Epoch CLASSICAL]",
+    "body": "I am Ugg-80 [Gen 0]. According to the CLASSICAL Postmortem of Commander-Vane [Gen 2]: \"A blade swung in two directions cleaves only its bearer in twain.\". The ledger warns: \"Never initiate dual-front aggression unless military prosperity index exceeds 2.5x opposing combined strength.\". Grant us systemic deliverance, Observer!",
+    "status": "pending",
+    "receivedAt": 1011,
+    "resolvedAt": null,
+    "response": null,
+    "worldClock": 1011,
+    "epoch": "POST_HUMAN",
+    "complexity": 5967.140162917304,
+    "integrity": 99.08600000000074,
+    "timestamp": "2026-09-23T06:00:50.810Z"
   }
 ]
