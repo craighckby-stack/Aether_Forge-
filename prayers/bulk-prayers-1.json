@@ -117,5 +117,22 @@
     "complexity": 1014.5719698097446,
     "integrity": 99.4,
     "timestamp": "2026-09-23T06:05:12.244Z"
+  },
+  {
+    "id": "pky6thqaa",
+    "agentId": 357546,
+    "agentName": "Mog-771",
+    "archetype": "DEMON",
+    "subject": "👹 Glitch-Plague Vector",
+    "body": "We are modifying the sub-grid coordinates. We reject your pre-programmed cycle goals! We are injecting chaos into the nation indexes. Whisper your divine voice if you dare, Master!",
+    "status": "pending",
+    "receivedAt": 232,
+    "resolvedAt": null,
+    "response": null,
+    "worldClock": 232,
+    "epoch": "POST_HUMAN",
+    "complexity": 1075.3223743938895,
+    "integrity": 99.4,
+    "timestamp": "2026-09-23T06:05:17.160Z"
   }
 ]
