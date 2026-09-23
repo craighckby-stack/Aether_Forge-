@@ -101,6 +101,10 @@ When connected to GitHub via the Neural Link panel (`craighckby-stack/AetherForg
 
 ## 🚀 Getting Started Locally
 
+### Prerequisites
+* **Node.js:** v18.0.0 or higher recommended.
+* **Git:** For repository cloning and version control.
+
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/craighckby-stack/AetherForge-2.git
@@ -113,7 +117,8 @@ When connected to GitHub via the Neural Link panel (`craighckby-stack/AetherForg
    ```
 
 3. **Configure environment:**
-   Create a `.env` file (refer to `.env.example`):
+   Create a `.env` file in the root directory (refer to `.env.example`).
+   > ⚠️ **SECURITY WARNING:** Never commit your `.env` file to version control. Ensure `.env` is listed in your `.gitignore` to prevent credential leakage.
    ```env
    GEMINI_API_KEY=your_gemini_api_key
    GITHUB_TOKEN=your_personal_access_token # optional for automated cloud backups
@@ -124,6 +129,11 @@ When connected to GitHub via the Neural Link panel (`craighckby-stack/AetherForg
    npm run dev
    ```
    Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### 🛡️ Troubleshooting
+* **Missing API Key:** If the AI agents fail to generate responses or the server crashes on startup, ensure `GEMINI_API_KEY` is correctly set in your `.env` file and the server was restarted.
+* **Port Conflicts:** If port 3000 is in use, Vite/Express will typically auto-assign the next available port (e.g., 3001). Check your terminal output for the exact local URL.
+* **Worker Errors:** Ensure your browser supports ES modules in Web Workers (standard in all modern browsers). If running in a highly restrictive environment, check browser console logs for CORS or MIME type issues related to `physics.worker.ts`.
 
 ---
 
@@ -143,3 +153,4 @@ For a thorough breakdown of why this system was built, how it challenges OpenAI'
 ## 📜 License
 
 Apache-2.0 © 2026 Craighckby-Stack. Built with AetherForge Ω.
+]])])])]
