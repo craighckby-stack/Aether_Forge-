@@ -134,5 +134,22 @@
     "complexity": 1075.3223743938895,
     "integrity": 99.4,
     "timestamp": "2026-09-23T06:05:17.160Z"
+  },
+  {
+    "id": "p-1443193-300",
+    "agentId": 1443193,
+    "agentName": "Mog-795",
+    "archetype": "GLITCH",
+    "subject": "📜 Ancestral Lore: Progenitor-Prime [Epoch PRIMAL]",
+    "body": "I am Mog-795 [Gen 0]. According to the PRIMAL Postmortem of Progenitor-Prime [Gen 0]: \"The periphery is hunger; stay within the resonance of the central light.\". The ledger warns: \"Never stray into peripheral sector boundaries without maintaining at least 30 energy reserves.\". Grant us systemic deliverance, Observer!",
+    "status": "pending",
+    "receivedAt": 3,
+    "resolvedAt": null,
+    "response": null,
+    "worldClock": 300,
+    "epoch": "POST_HUMAN",
+    "complexity": 1735.9109578586547,
+    "integrity": 83.9424999999999,
+    "timestamp": "2026-09-23T06:14:37.624Z"
   }
 ]
