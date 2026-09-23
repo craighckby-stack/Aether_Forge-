@@ -79,3 +79,11 @@ Line 119, Col 17: Type annotations can only be used in TypeScript files.
 Line 357, Col 8: Property declaration is missing its type annotation.
 ```
 **CONSTRAINT (Model Generalization):** Never repeat code patterns that produce this compiler/linter error on src/engine/darlekRAG.ts.
+
+### ❌ [2026-09-23] src/engine/emgGate.ts `source: mutation-cycle`
+**Symptom:** AST / TypeScript Compiler Validation Rejected
+**EVIDENCE (Machine-Copied Fact):**
+```
+Line 206, Col 2: Expression expected.
+```
+**CONSTRAINT (Model Generalization):** Never repeat code patterns that produce this compiler/linter error on src/engine/emgGate.ts.
