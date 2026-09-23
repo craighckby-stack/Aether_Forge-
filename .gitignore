@@ -6,6 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+!.env.template
 firebase-applet-config.json
 
 # Defensive Additions: Secrets & Credentials
@@ -32,6 +33,21 @@ client_secret*.json
 .env.local
 .env.*.local
 *.kdbx
+*.env
+*.env.*
+.sentryclirc
+.dev.vars
+
+# Defensive Additions: Cloud & Infrastructure Secrets
+.azure/
+.gcloud/
+.terraform/
+*.tfvars
+*.tfvars.json
+terraform.tfstate*
+kubeconfig
+*.kubeconfig
+docker-compose.override.yml
 
 # Defensive Additions: Logs & Diagnostic Dumps
 npm-debug.log*
@@ -43,12 +59,17 @@ lerna-debug.log*
 *.cpuprofile
 core.*
 *.stackdump
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+hub-debug.log*
 
 # Defensive Additions: Caches & Temporary Files
 .npm/
 .eslintcache
 .stylelintcache
 .tsbuildinfo
+tsconfig.tsbuildinfo
 .serverless/
 .cache/
 tmp/
@@ -65,6 +86,11 @@ storybook-static/
 .yarn/unplugged/
 .yarn/build-state.yml
 .yarn/install-state.gz
+.vite/
+.astro/
+.docusaurus/
+.firebase/
+.supabase/
 
 # Defensive Additions: Testing & Diagnostic Outputs
 .nyc_output/
@@ -92,3 +118,5 @@ desktop.ini
 .history/
 *.bak
 *.tmp
+*.orig
+*.rej
