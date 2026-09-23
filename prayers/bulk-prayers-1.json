@@ -100,5 +100,22 @@
     "complexity": 7544.17006311688,
     "integrity": 97.944000000002,
     "timestamp": "2026-09-23T06:03:27.576Z"
+  },
+  {
+    "id": "aiwmeqkmi",
+    "agentId": 5132846,
+    "agentName": "Grug-976",
+    "archetype": "DEMON",
+    "subject": "🔥 Anarchic Core Rebellion",
+    "body": "I, Demon Grug-976, cherish the decay of the sun. The entropy value of 0.006 is beautiful. We shall inherit the dark void when your grid collapses into memory leaks!",
+    "status": "pending",
+    "receivedAt": 207,
+    "resolvedAt": null,
+    "response": null,
+    "worldClock": 207,
+    "epoch": "POST_HUMAN",
+    "complexity": 1014.5719698097446,
+    "integrity": 99.4,
+    "timestamp": "2026-09-23T06:05:12.244Z"
   }
 ]
