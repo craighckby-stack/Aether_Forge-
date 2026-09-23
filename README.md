@@ -8,6 +8,16 @@
 
 ---
 
+## 📑 Strategic Research & Industry Applications
+
+For frontier laboratories (e.g., OpenAI, Anthropic), enterprise agentic systems, and alignment researchers, we have compiled a dedicated strategic analysis:
+
+👉 **[AetherForge Ω: Industry Use Cases & Practical Applications (APPLICATIONS.md)](./APPLICATIONS.md)**
+
+This document details how the AetherForge architecture serves as a high-fidelity testbed for studying **situational awareness**, **deceptive alignment**, **automated self-replicating safe code execution**, and **consensus-based memory synchronization (SHA-256 RAG Ledgers)**.
+
+---
+
 ## 🌐 Live Deployments & Preview Links
 
 * **🚀 Shared App / Production Preview:**  
