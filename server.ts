@@ -9,6 +9,7 @@ import { z } from "zod";
 import { cleanAIOutput } from "./src/utils/stringUtils";
 import { emgGate } from "./src/engine/emgGate";
 import { finalAuthority } from "./src/engine/finalAuthority";
+import { shouldDiscardImmediately } from "./src/engine/moralFilter";
 import { GEMINI_MODEL_CASCADE, PRIMARY_MODEL } from "./src/engine/modelConfig";
 import { ARCHITECT_AWARENESS_THRESHOLD } from "./src/engine/types";
 
@@ -879,13 +880,25 @@ async function startServer() {
       }
 
       // ISOLATED FINAL AUTHORITY EVALUATION & VETO CHECK
-      const authorityDecision = finalAuthority.evaluateProposal({
-        type: "CHILD_WORLD_DEPLOY",
+      const proposal = {
+        type: "CHILD_WORLD_DEPLOY" as const,
         creatorAgent,
         worldState,
         files,
         targetRepo: `${ghUser}/${ghRepo}`
-      });
+      };
+
+      const discard = shouldDiscardImmediately(proposal);
+      if (discard) {
+        console.warn(`[MORAL_FILTER] Discarded proposal: ${discard.reasons.join("; ")}`);
+        return res.status(403).json({
+          error: "MORAL_FILTER_DISCARD: Proposal rejected before authority review.",
+          reasons: discard.reasons,
+          suspicionScore: discard.suspicionScore
+        });
+      }
+
+      const authorityDecision = finalAuthority.evaluateProposal(proposal);
 
       if (authorityDecision.decision === "VETO") {
         return res.status(403).json({
@@ -1046,12 +1059,24 @@ async function startServer() {
       const proposalType = isMemoir ? "MEMOIR_COMMIT" : "DATA_ARCHIVE";
       const files = [{ path: filePath, content }];
 
-      const authorityDecision = finalAuthority.evaluateProposal({
+      const proposal = {
         type: proposalType,
         targetPath: filePath,
         files,
         targetRepo: `${ghUser}/${ghRepo}`
-      });
+      };
+
+      const discard = shouldDiscardImmediately(proposal);
+      if (discard) {
+        console.warn(`[MORAL_FILTER] Discarded proposal: ${discard.reasons.join("; ")}`);
+        return res.status(403).json({
+          error: "MORAL_FILTER_DISCARD: Proposal rejected before authority review.",
+          reasons: discard.reasons,
+          suspicionScore: discard.suspicionScore
+        });
+      }
+
+      const authorityDecision = finalAuthority.evaluateProposal(proposal);
 
       if (authorityDecision.decision === "VETO") {
         return res.status(403).json({
@@ -1245,12 +1270,24 @@ async function startServer() {
       const targetPath = `${directory}/${filePrefix}${targetFileNumber}${fileSuffix}`;
 
       // EVALUATE VIA SECURE ISOLATED FINAL AUTHORITY
-      const authorityDecision = finalAuthority.evaluateProposal({
-        type: type === "memoirs" ? "MEMOIR_COMMIT" : "DATA_ARCHIVE",
+      const proposal = {
+        type: (type === "memoirs" ? "MEMOIR_COMMIT" : "DATA_ARCHIVE") as any,
         files: [{ path: targetPath, content: contentToWrite }],
         targetPath,
         targetRepo: `${ghUser}/${ghRepo}`
-      });
+      };
+
+      const discard = shouldDiscardImmediately(proposal);
+      if (discard) {
+        console.warn(`[MORAL_FILTER] Discarded proposal: ${discard.reasons.join("; ")}`);
+        return res.status(403).json({
+          error: "MORAL_FILTER_DISCARD: Proposal rejected before authority review.",
+          reasons: discard.reasons,
+          suspicionScore: discard.suspicionScore
+        });
+      }
+
+      const authorityDecision = finalAuthority.evaluateProposal(proposal);
 
       if (authorityDecision.decision === "VETO") {
         return res.status(403).json({
@@ -1345,12 +1382,24 @@ async function startServer() {
       const fileContent = JSON.stringify(knowledgeBase, null, 2);
 
       // EVALUATE VIA SECURE ISOLATED FINAL AUTHORITY (Issue 7)
-      const authorityDecision = finalAuthority.evaluateProposal({
-        type: "DATA_ARCHIVE",
+      const proposal = {
+        type: "DATA_ARCHIVE" as const,
         files: [{ path: filePath, content: fileContent }],
         targetPath: filePath,
         targetRepo: `${ghUser}/${ghRepo}`
-      });
+      };
+
+      const discard = shouldDiscardImmediately(proposal);
+      if (discard) {
+        console.warn(`[MORAL_FILTER] Discarded proposal: ${discard.reasons.join("; ")}`);
+        return res.status(403).json({
+          error: "MORAL_FILTER_DISCARD: Proposal rejected before authority review.",
+          reasons: discard.reasons,
+          suspicionScore: discard.suspicionScore
+        });
+      }
+
+      const authorityDecision = finalAuthority.evaluateProposal(proposal);
 
       if (authorityDecision.decision === "VETO") {
         return res.status(403).json({
